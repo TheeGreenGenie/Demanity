@@ -20,11 +20,25 @@ export class BudgetExhausted extends Error {
   }
 }
 
+/**
+ * The provider asked us to slow down (429) or is temporarily unavailable
+ * (502/503/504). Either way: stop this run, keep what was saved, no retries.
+ */
 export class ProviderRateLimited extends Error {
-  constructor(readonly source: string) {
-    super(`${source}: provider returned 429 Too Many Requests; stopping this run`);
+  constructor(
+    readonly source: string,
+    readonly status = 429,
+  ) {
+    super(
+      status === 429
+        ? `${source}: provider returned 429 Too Many Requests; stopping this run`
+        : `${source}: provider temporarily unavailable (HTTP ${status}); will resume next run`,
+    );
   }
 }
+
+/** Statuses that mean "stop for now and try again next run". */
+export const isTransient = (status: number) => status === 429 || (status >= 502 && status <= 504);
 
 export type Window = 'minute' | 'hour' | 'day';
 

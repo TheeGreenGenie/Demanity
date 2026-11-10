@@ -140,7 +140,7 @@ if (svc.dataGovApiKey) {
     jobs.push(() =>
       syncRulings(pool, courts, { perCourt: caps.rulingsPerCourt }).then((r) =>
         app.log.info(
-          { rulings: r.rulings, stoppedEarly: r.stoppedEarly },
+          { rulings: r.rulings, dockets: r.dockets, stoppedEarly: r.stoppedEarly },
           'courtlistener sync complete',
         ),
       ),

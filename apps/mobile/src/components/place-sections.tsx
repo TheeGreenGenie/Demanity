@@ -18,7 +18,7 @@ import { ErrorText } from '@/components/form';
 import { ThemedText } from '@/components/themed-text';
 import { Brand, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { civic, describeError, type Place, type Scores } from '@/lib/api';
+import { civic, describeError, type CourtCase, type Place, type Scores } from '@/lib/api';
 
 export type PlaceTab = 'overview' | 'scores' | 'living' | 'leaders';
 export const PLACE_TABS: readonly { key: PlaceTab; label: string }[] = [
@@ -202,35 +202,28 @@ function OverviewTab({ place }: { place: Place }) {
         </View>
       </Section>
 
+      {place.filings ? (
+        <Section
+          title="New case filings"
+          caption="Federal cases filed in this district, newest first (PACER dockets via CourtListener)."
+        >
+          {place.filings.length === 0 ? (
+            <Empty text="No case filings synced yet." />
+          ) : (
+            place.filings.map((c) => <CaseRow key={c.url} item={c} />)
+          )}
+        </Section>
+      ) : null}
+
       {place.rulings ? (
         <Section
           title="Latest published opinions"
-          caption="From CourtListener, newest first. Its coverage of district courts is limited, so check each date."
+          caption="From CourtListener, newest first. Its coverage of district-court opinions is limited, so check each date."
         >
           {place.rulings.length === 0 ? (
             <Empty text="No opinions synced yet." />
           ) : (
-            place.rulings.map((r) => (
-              <Pressable
-                key={r.url}
-                accessibilityRole="link"
-                onPress={() => Linking.openURL(r.url)}
-                style={({ pressed }) => [
-                  styles.election,
-                  { borderBottomColor: theme.backgroundSelected },
-                  pressed && { opacity: 0.75 },
-                ]}
-              >
-                <Ionicons name="document-text-outline" size={20} color={Brand.primary} />
-                <View style={styles.flex}>
-                  <ThemedText type="smallBold">{r.caseName}</ThemedText>
-                  <ThemedText type="caption" themeColor="textSecondary">
-                    Filed {r.dateFiled}
-                    {r.docketNumber ? ` · ${r.docketNumber}` : ''}
-                  </ThemedText>
-                </View>
-              </Pressable>
-            ))
+            place.rulings.map((c) => <CaseRow key={c.url} item={c} />)
           )}
         </Section>
       ) : null}
@@ -289,6 +282,34 @@ function OverviewTab({ place }: { place: Place }) {
         </Pressable>
       ) : null}
     </View>
+  );
+}
+
+/** One court case: its formal citation, and a link to the source (R33). */
+function CaseRow({ item }: { item: CourtCase }) {
+  const theme = useTheme();
+  return (
+    <Pressable
+      accessibilityRole="link"
+      accessibilityLabel={`${item.citation}. Open on ${item.sourceName}`}
+      onPress={() => Linking.openURL(item.url)}
+      style={({ pressed }) => [
+        styles.election,
+        { borderBottomColor: theme.backgroundSelected },
+        pressed && { opacity: 0.75 },
+      ]}
+    >
+      <Ionicons name="document-text-outline" size={20} color={Brand.primary} />
+      <View style={styles.flex}>
+        <ThemedText type="smallBold">{item.caseName}</ThemedText>
+        <ThemedText type="caption" themeColor="textSecondary" selectable>
+          {item.citation}
+        </ThemedText>
+        <ThemedText type="caption" style={{ color: Brand.primary, fontWeight: 800 }}>
+          View on {item.sourceName} ↗
+        </ThemedText>
+      </View>
+    </Pressable>
   );
 }
 

@@ -84,7 +84,7 @@ try {
       new CourtListenerClient(need('COURTLISTENER_API_TOKEN'), fetch, budget),
       { perCourt: caps.rulingsPerCourt },
     );
-    console.log(`CourtListener: ${r.rulings} rulings.`);
+    console.log(`CourtListener: ${r.dockets} case filings, ${r.rulings} opinions.`);
     if (r.stoppedEarly) console.log(`Stopped early: ${r.stoppedEarly}`);
     console.log(`Requests today: ${await budget.used('day')} of ${COURTLISTENER_BUDGET.perDay}.`);
   } else {

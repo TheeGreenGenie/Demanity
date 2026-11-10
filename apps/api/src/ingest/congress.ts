@@ -1,5 +1,5 @@
 import type { Pool } from '@demanity/db';
-import { BudgetExhausted, ProviderRateLimited, type ApiBudget } from './budget.js';
+import { BudgetExhausted, isTransient, ProviderRateLimited, type ApiBudget } from './budget.js';
 
 /**
  * Congress.gov bill ingestion (R23, R30; docs/LEGISLATION.md).
@@ -68,7 +68,7 @@ export class CongressClient {
     url.searchParams.set('api_key', this.apiKey);
     await this.budget?.take();
     const res = await this.fetchFn(url.toString());
-    if (res.status === 429) throw new ProviderRateLimited('congress.gov');
+    if (isTransient(res.status)) throw new ProviderRateLimited('congress.gov', res.status);
     // Never include the URL (it carries the key) in errors or logs.
     if (!res.ok) throw new Error(`Congress.gov ${path} failed: HTTP ${res.status}`);
     return (await res.json()) as T;

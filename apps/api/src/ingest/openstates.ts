@@ -1,5 +1,5 @@
 import type { Pool } from '@demanity/db';
-import { BudgetExhausted, ProviderRateLimited, type ApiBudget } from './budget.js';
+import { BudgetExhausted, isTransient, ProviderRateLimited, type ApiBudget } from './budget.js';
 import { statusFromAction } from './congress.js';
 
 /**
@@ -68,7 +68,7 @@ export class OpenStatesClient {
     url.searchParams.set('per_page', '20');
     await this.budget?.take();
     const res = await this.fetchFn(url.toString(), { headers: { 'X-API-KEY': this.apiKey } });
-    if (res.status === 429) throw new ProviderRateLimited(SOURCE);
+    if (isTransient(res.status)) throw new ProviderRateLimited(SOURCE, res.status);
     if (!res.ok) throw new Error(`Open States /bills failed: HTTP ${res.status}`);
     return (await res.json()) as {
       results: OSBill[];

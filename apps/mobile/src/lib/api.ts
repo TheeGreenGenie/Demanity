@@ -254,7 +254,9 @@ export interface Place {
   kind: PlaceKind;
   population: number | null;
   /** Court-district pages only: latest published opinions (CourtListener). */
-  rulings: { caseName: string; docketNumber: string; dateFiled: string; url: string }[] | null;
+  rulings: CourtCase[] | null;
+  /** Court-district pages only: newest case filings, PACER dockets (CourtListener). */
+  filings: CourtCase[] | null;
   peerGroup: string;
   peerLabel: string;
   cost: {
@@ -293,6 +295,18 @@ export interface Place {
   leaders: LeaderSummary[];
   stats: Stat[];
   recentBills: Bill[];
+}
+
+/** A court case with its formal citation and the link to its source. */
+export interface CourtCase {
+  caseName: string;
+  docketNumber: string;
+  courtCitation: string;
+  dateFiled: string;
+  /** Bluebook-style, e.g. "Doe v. Roe, No. 2:26-cv-1 (C.D. Cal. filed Nov. 10, 2026)". */
+  citation: string;
+  url: string;
+  sourceName: string;
 }
 
 export interface Leader {
