@@ -1,4 +1,5 @@
 import type { Pool, PoolClient } from '@demanity/db';
+import { remapSubjectTopics } from '../ingest/subjects.js';
 import { TRUST_V1, trustScore, wilsonLowerBound, type TrustCitation } from './trust.js';
 
 /**
@@ -217,6 +218,9 @@ export async function recomputeRollups(
                .map(([k, v]) => `WHEN '${k}' THEN '${v}'`)
                .join(' ')} END
         FROM leaders l`;
+
+    // 1a. State bill topics from stored subject tags (draft mapping, under review).
+    await remapSubjectTopics(client);
 
     // 1b. Leader trust scores from accepted citations.
     await recomputeTrust(client, now);

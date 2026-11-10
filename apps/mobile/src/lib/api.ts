@@ -228,6 +228,8 @@ export interface Bill {
   isSample: boolean;
   place: { slug: string; name: string };
   category: { slug: string; name: string } | null;
+  /** Topic auto-mapped from state subject tags (draft mapping, under review). */
+  categoryAuto: boolean;
   sponsors: { slug: string; name: string; party: string; role: string }[];
   bipartisan: boolean;
   weighedIn: boolean;
@@ -579,12 +581,22 @@ export const civic = {
       token,
       body: { category, essay },
     }),
-  myContributor: (token: string) => request<ContributorStatus>('GET', '/v1/me/contributor', { token }),
+  myContributor: (token: string) =>
+    request<ContributorStatus>('GET', '/v1/me/contributor', { token }),
   pendingApplications: (token: string) =>
-    request<{ applications: PendingApplication[] }>('GET', '/v1/moderation/contributor-applications', {
-      token,
-    }),
-  decideApplication: (token: string, id: string, decision: 'approve' | 'reject', reasonCode: string) =>
+    request<{ applications: PendingApplication[] }>(
+      'GET',
+      '/v1/moderation/contributor-applications',
+      {
+        token,
+      },
+    ),
+  decideApplication: (
+    token: string,
+    id: string,
+    decision: 'approve' | 'reject',
+    reasonCode: string,
+  ) =>
     request<{ status: string }>('POST', `/v1/moderation/contributor-applications/${id}/decision`, {
       token,
       body: { decision, reasonCode },

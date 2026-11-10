@@ -105,6 +105,7 @@ export default function BillScreen() {
             >
               <ThemedText type="caption" style={styles.bold}>
                 c/{bill.category.slug}
+                {bill.categoryAuto ? ' · auto-mapped from state tags (under review)' : ''}
               </ThemedText>
             </Pressable>
           ) : null}

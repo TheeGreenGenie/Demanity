@@ -60,7 +60,15 @@ Demanity is a **government accountability** app. It tracks every new government 
   - a status inferred from the latest action, using the same rules as federal bills plus state wording ("Chaptered", "Signed/Approved by the Governor", "Presented to the Governor", "Enrolled");
   - the Open States page URL;
   - up to 3 sponsors, as state-legislator leader records.
-- **Category:** none for now. State subject tags don't map one-to-one to the CRS policy areas, and we don't guess.
+- **Category (draft, REVIEW BEFORE RELEASE):** states tag bills with their own subject terms, which Open States passes through. A keyword table (`subject_category_map`, in migrations 0014 and 0015) maps them to our 32 topics.
+  - Each tag votes for every topic whose keyword it contains. Matching compares letters only, because California sends tags with the spaces removed ("Stategovernment").
+  - A bill gets a topic only when one topic is strictly ahead. Ties or no matches leave it without a topic. Titles are never used.
+  - The raw tags are stored on each bill so every mapping can be audited.
+  - Auto-mapped topics are labeled in the app as "auto-mapped from state tags (under review)". Hand-set topics are never overwritten.
+  - Edits to the table take effect at the next recompute, with no re-fetching.
+  - **Live check (2026-11-10):** 15 of 20 tagged California bills mapped. One wrong mapping ("tribal colleges" → Native Americans) was fixed by adding education keywords.
+  - **New York and Pennsylvania bills arrived with no subject tags,** so they have no topic until another source or a manual review supplies one.
+  - **Before release:** cross-partisan review of the keyword table ([NONPARTISANSHIP.md](NONPARTISANSHIP.md)).
 - **Command:** `pnpm --filter @demanity/api ingest:states`.
 
 ### Court opinions (CourtListener), implemented with a coverage caveat

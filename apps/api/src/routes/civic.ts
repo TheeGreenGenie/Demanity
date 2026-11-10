@@ -55,6 +55,8 @@ export interface BillView {
   level: 'federal' | 'state';
   place: { slug: string; name: string };
   category: { slug: string; name: string } | null;
+  /** True when the topic was auto-mapped from state subject tags (draft mapping, under review). */
+  categoryAuto: boolean;
   sponsors: Array<{ slug: string; name: string; party: string; role: string }>;
   bipartisan: boolean;
   weighedIn: boolean;
@@ -65,7 +67,7 @@ export interface BillView {
 
 /** Bill rows; $1 is the viewer (or null). `extra` adds columns. */
 export const billSelect = (extra = '') => `
-  SELECT b.id, b.number, b.title, b.summary, b.impact, b.status, ${STAGE_SQL} AS stage,
+  SELECT b.id, b.number, b.title, b.summary, b.impact, b.status, b.category_auto, ${STAGE_SQL} AS stage,
          b.introduced_at, b.last_action_at, b.source_url, b.is_sample, p.kind AS place_kind,
          p.slug AS place_slug, p.name AS place_name, c.slug AS category_slug, c.name AS category_name,
          COALESCE((SELECT json_agg(json_build_object('slug', l.slug, 'name', l.name, 'party', l.party, 'role', s.role)
@@ -98,6 +100,7 @@ export interface BillRow {
   place_name: string;
   category_slug: string | null;
   category_name: string | null;
+  category_auto: boolean;
   sponsors: BillView['sponsors'];
   parties: string;
   weighed_in: boolean;
@@ -122,6 +125,7 @@ export function billView(r: BillRow): BillView {
     level: r.place_kind === 'nation' ? 'federal' : 'state',
     place: { slug: r.place_slug, name: r.place_name },
     category: r.category_slug ? { slug: r.category_slug, name: r.category_name! } : null,
+    categoryAuto: r.category_auto,
     sponsors: r.sponsors,
     bipartisan: Number(r.parties) >= 2,
     weighedIn: r.weighed_in,

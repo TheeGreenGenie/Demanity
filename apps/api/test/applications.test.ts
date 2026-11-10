@@ -39,21 +39,31 @@ const essay = 'Health policy essay. '.repeat(20); // > 300 characters
 describe('contributor applications', () => {
   it('lets a member apply once per category; moderators approve into a 1-year grant', async () => {
     expect(
-      (await call('POST', '/v1/contributor-applications', alice, { category: 'health', essay: 'too short' }))
-        .statusCode,
+      (
+        await call('POST', '/v1/contributor-applications', alice, {
+          category: 'health',
+          essay: 'too short',
+        })
+      ).statusCode,
     ).toBe(400);
-    const res = await call('POST', '/v1/contributor-applications', alice, { category: 'health', essay });
+    const res = await call('POST', '/v1/contributor-applications', alice, {
+      category: 'health',
+      essay,
+    });
     expect(res.statusCode).toBe(201);
     expect(
-      (await call('POST', '/v1/contributor-applications', alice, { category: 'health', essay })).json()
-        .error,
+      (
+        await call('POST', '/v1/contributor-applications', alice, { category: 'health', essay })
+      ).json().error,
     ).toBe('application_pending');
 
     const queue = (await call('GET', '/v1/moderation/contributor-applications', mod)).json()
       .applications;
     expect(queue).toHaveLength(1);
     expect(queue[0]).not.toHaveProperty('username'); // judge the essay, not the person
-    expect((await call('GET', '/v1/moderation/contributor-applications', bob)).statusCode).toBe(403);
+    expect((await call('GET', '/v1/moderation/contributor-applications', bob)).statusCode).toBe(
+      403,
+    );
 
     expect(
       (
@@ -74,12 +84,15 @@ describe('contributor applications', () => {
 
     const me = (await call('GET', '/v1/me/contributor', alice)).json();
     expect(me.grants).toEqual([expect.objectContaining({ category: 'health' })]);
-    expect(new Date(me.grants[0].expiresAt).getTime()).toBeGreaterThan(Date.now() + 360 * 86_400_000);
+    expect(new Date(me.grants[0].expiresAt).getTime()).toBeGreaterThan(
+      Date.now() + 360 * 86_400_000,
+    );
     expect(me.applications[0]).toMatchObject({ status: 'approved', reasonCode: 'essay_approved' });
     // An active contributor doesn't re-apply.
     expect(
-      (await call('POST', '/v1/contributor-applications', alice, { category: 'health', essay })).json()
-        .error,
+      (
+        await call('POST', '/v1/contributor-applications', alice, { category: 'health', essay })
+      ).json().error,
     ).toBe('already_contributor');
     const { rows } = await h.apiPool.query(
       "SELECT 1 FROM moderation_log WHERE action = 'contributor_application.approved'",
@@ -146,7 +159,8 @@ describe('leader page claims', () => {
       `INSERT INTO leaders (slug, name, office, office_kind, party, place_id)
        SELECT 'other-leader', 'Other Leader', 'Mayor', 'mayor', '', id FROM places WHERE slug = 'texas'`,
     );
-    const own = (await call('POST', '/v1/leaders/other-leader/claims', mod, { evidence })).json().id;
+    const own = (await call('POST', '/v1/leaders/other-leader/claims', mod, { evidence })).json()
+      .id;
     expect(
       (
         await call('POST', `/v1/moderation/leader-claims/${own}/decision`, mod, {

@@ -17,6 +17,7 @@ import {
   syncRulings,
 } from '../src/ingest/courtlistener.js';
 import { OpenStatesClient, syncStateBills } from '../src/ingest/openstates.js';
+import { topicFromSubjects } from '../src/ingest/subjects.js';
 
 /**
  * Open States and CourtListener adapters against fake APIs whose shapes
@@ -72,6 +73,7 @@ describe('Open States state bills', () => {
     latest_action_description: 'Chaptered by Secretary of State. Chapter 101, Statutes of 2026.',
     updated_at: '2026-11-09T10:00:00+00:00',
     abstracts: [{ abstract: 'Extends clinic hours.' }],
+    subject: ['Health', 'Medical Facilities', 'Taxation and Revenue'],
     sponsorships: [
       {
         name: 'Rivera',
@@ -108,9 +110,11 @@ describe('Open States state bills', () => {
     expect(u.searchParams.getAll('include')).toEqual(['sponsorships', 'abstracts']);
     expect(u.searchParams.get('per_page')).toBe('20');
     const { rows } = await pool.query(
-      `SELECT b.number, b.status, b.summary, b.source_url, p.slug AS place, l.name, l.office_kind
+      `SELECT b.number, b.status, b.summary, b.source_url, p.slug AS place, l.name, l.office_kind,
+              c.slug AS topic, b.category_auto, b.subjects
          FROM bills b JOIN places p ON p.id = b.place_id
          JOIN bill_sponsors s ON s.bill_id = b.id JOIN leaders l ON l.id = s.leader_id
+         LEFT JOIN communities c ON c.id = b.category_id
         WHERE b.source = 'openstates'`,
     );
     expect(rows).toEqual([
@@ -122,6 +126,10 @@ describe('Open States state bills', () => {
         place: 'california',
         name: 'Ana Rivera',
         office_kind: 'state_house',
+        // Two subjects say health, one says tax: health wins, flagged as auto-mapped.
+        topic: 'health',
+        category_auto: true,
+        subjects: ['Health', 'Medical Facilities', 'Taxation and Revenue'],
       },
     ]);
   });
@@ -141,6 +149,32 @@ describe('Open States state bills', () => {
   it('reads state wording for status', () => {
     expect(statusFromAction('Approved by the Governor.')).toBe('signed');
     expect(statusFromAction('Enrolled and presented to the Governor at 3 p.m.')).toBe('passed');
+  });
+});
+
+describe('state subject → topic mapping (draft)', () => {
+  const map = [
+    { keyword: 'health', category_slug: 'health' },
+    { keyword: 'medical', category_slug: 'health' },
+    { keyword: 'tax', category_slug: 'taxation' },
+    { keyword: 'water', category_slug: 'water-resources-development' },
+    { keyword: 'pollution', category_slug: 'environmental-protection' },
+  ];
+  it('picks a topic only when one clearly leads', () => {
+    expect(topicFromSubjects(['Health', 'Medical Care', 'Taxation'], map)).toBe('health');
+    expect(topicFromSubjects(['Taxation'], map)).toBe('taxation');
+    // Tags with spaces removed still match multi-word keywords.
+    expect(
+      topicFromSubjects(
+        ['Stategovernment'],
+        [{ keyword: 'state government', category_slug: 'gov' }],
+      ),
+    ).toBe('gov');
+  });
+  it('gives no topic on a tie or when nothing matches (never guesses)', () => {
+    expect(topicFromSubjects(['Water Pollution'], map)).toBeNull(); // water vs. environment
+    expect(topicFromSubjects(['Ceremonial Resolutions'], map)).toBeNull();
+    expect(topicFromSubjects([], map)).toBeNull();
   });
 });
 

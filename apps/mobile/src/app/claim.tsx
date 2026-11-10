@@ -43,13 +43,19 @@ export default function ClaimScreen() {
 
   if (done)
     return (
-      <Screen title="Claim submitted" subtitle="A moderator will contact you through an official channel.">
+      <Screen
+        title="Claim submitted"
+        subtitle="A moderator will contact you through an official channel."
+      >
         <Button title="Back" onPress={() => router.back()} />
       </Screen>
     );
 
   return (
-    <Screen title={`Claim ${name ?? 'this page'}`} subtitle="For the officeholder or their official staff.">
+    <Screen
+      title={`Claim ${name ?? 'this page'}`}
+      subtitle="For the officeholder or their official staff."
+    >
       <View style={[styles.card, { backgroundColor: theme.backgroundElement }]}>
         <ThemedText type="small" themeColor="textSecondary">
           Once confirmed, you can post as yourself, answer people’s requests, and cite other leaders

@@ -8,13 +8,7 @@ import { Screen } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
 import { Brand, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import {
-  civic,
-  describeError,
-  social,
-  type Community,
-  type ContributorStatus,
-} from '@/lib/api';
+import { civic, describeError, social, type Community, type ContributorStatus } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 
 const MIN = 300;
@@ -59,7 +53,8 @@ export default function ContributeScreen() {
 
   async function submit() {
     const text = essay.trim();
-    if (text.length < MIN) return setEssayError(`Write at least ${MIN} characters (${text.length} so far).`);
+    if (text.length < MIN)
+      return setEssayError(`Write at least ${MIN} characters (${text.length} so far).`);
     setEssayError(undefined);
     setBusy(true);
     setError(null);
@@ -126,7 +121,9 @@ export default function ContributeScreen() {
           {status.applications.map((a) => (
             <ThemedText key={a.id} type="small" themeColor="textSecondary">
               {a.categoryName}: {STATUS_LABEL[a.status]}
-              {a.reasonCode && a.status === 'rejected' ? ` (${a.reasonCode.replace(/_/g, ' ')})` : ''}
+              {a.reasonCode && a.status === 'rejected'
+                ? ` (${a.reasonCode.replace(/_/g, ' ')})`
+                : ''}
             </ThemedText>
           ))}
         </View>

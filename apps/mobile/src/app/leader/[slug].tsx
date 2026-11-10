@@ -252,7 +252,9 @@ function RequestsTab({ leader }: { leader: Leader }) {
                 <ThemedText type="small">{r.response}</ThemedText>
               </View>
             ) : null}
-            {isLeader && r.status !== 'done' ? <LeaderControls request={r} onChange={load} /> : null}
+            {isLeader && r.status !== 'done' ? (
+              <LeaderControls request={r} onChange={load} />
+            ) : null}
           </View>
         </View>
       ))}
@@ -367,19 +369,37 @@ function LeaderControls({ request, onChange }: { request: LeaderRequest; onChang
     <View style={styles.controls}>
       {writing ? (
         <>
-          <Field label="Your response" value={text} onChangeText={setText} multiline maxLength={4000} />
+          <Field
+            label="Your response"
+            value={text}
+            onChangeText={setText}
+            multiline
+            maxLength={4000}
+          />
           <Button
             title="Post response"
             size="small"
-            onPress={() => (text.trim() ? update('responded', text.trim()) : setError('Write a response first.'))}
+            onPress={() =>
+              text.trim() ? update('responded', text.trim()) : setError('Write a response first.')
+            }
           />
         </>
       ) : (
         <View style={styles.controlRow}>
           {request.status === 'open' ? (
-            <Button title="Acknowledge" size="small" variant="secondary" onPress={() => update('acknowledged')} />
+            <Button
+              title="Acknowledge"
+              size="small"
+              variant="secondary"
+              onPress={() => update('acknowledged')}
+            />
           ) : null}
-          <Button title="Respond" size="small" variant="secondary" onPress={() => setWriting(true)} />
+          <Button
+            title="Respond"
+            size="small"
+            variant="secondary"
+            onPress={() => setWriting(true)}
+          />
           <Button title="Mark done" size="small" variant="ghost" onPress={() => update('done')} />
         </View>
       )}
@@ -407,7 +427,12 @@ function RequestStatusChip({ status }: { status: RequestStatus }) {
 }
 
 const styles = StyleSheet.create({
-  banner2: { marginHorizontal: Spacing.three, marginTop: Spacing.two, padding: Spacing.three - 4, borderRadius: Radius.medium },
+  banner2: {
+    marginHorizontal: Spacing.three,
+    marginTop: Spacing.two,
+    padding: Spacing.three - 4,
+    borderRadius: Radius.medium,
+  },
   controls: { gap: Spacing.two, marginTop: Spacing.two },
   controlRow: { flexDirection: 'row', gap: Spacing.two, flexWrap: 'wrap' },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three },

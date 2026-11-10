@@ -57,7 +57,10 @@ export default function ModerationScreen() {
   return (
     <Screen title="Moderation" subtitle="Every decision cites a reason and is publicly logged.">
       <ErrorText message={error} />
-      <Section title={`Citations (${items?.length ?? 0})`} caption="Check that the source supports the claim." />
+      <Section
+        title={`Citations (${items?.length ?? 0})`}
+        caption="Check that the source supports the claim."
+      />
       {items && items.length === 0 ? (
         <ThemedText themeColor="textSecondary">Nothing waiting for review.</ThemedText>
       ) : null}
@@ -147,7 +150,12 @@ function DecisionCard({
         {heading}
       </ThemedText>
       <ThemedText type="small">{body}</ThemedText>
-      <Chips label="Reason for rejecting" value={reason} onChange={setReason} options={rejectReasons} />
+      <Chips
+        label="Reason for rejecting"
+        value={reason}
+        onChange={setReason}
+        options={rejectReasons}
+      />
       <ErrorText message={error} />
       <View style={styles.row}>
         <View style={styles.flex}>

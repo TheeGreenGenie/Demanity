@@ -1,6 +1,7 @@
 import type { Pool } from '@demanity/db';
 import { BudgetExhausted, isTransient, ProviderRateLimited, type ApiBudget } from './budget.js';
 import { statusFromAction } from './congress.js';
+import { topicFromSubjects } from './subjects.js';
 
 /**
  * Open States v3 state-bill ingestion for the 5 MVP states (R23, R30).
@@ -35,6 +36,8 @@ export interface OSBill {
   latest_action_description?: string | null;
   updated_at: string;
   abstracts?: Array<{ abstract: string }>;
+  /** The state's own subject tags (a default Bill field in Open States v3). */
+  subject?: string[];
   sponsorships?: Array<{
     name: string;
     primary: boolean;
@@ -117,6 +120,13 @@ export async function syncStateBills(
   let bills = 0;
   let leaders = 0;
   let stoppedEarly: string | null = null;
+  const { rows: subjectMap } = await pool.query<{ keyword: string; category_slug: string }>(
+    'SELECT keyword, category_slug FROM subject_category_map',
+  );
+  const { rows: topicRows } = await pool.query<{ id: string; slug: string }>(
+    "SELECT id, slug FROM communities WHERE kind = 'topic'",
+  );
+  const topicId = new Map(topicRows.map((t) => [t.slug, t.id]));
 
   for (const slug of opts.states ?? Object.keys(MVP_STATES)) {
     const source = `${SOURCE}:${slug}`;
@@ -182,10 +192,13 @@ export async function syncStateBills(
           const day = (d?: string | null) => (d ? d.slice(0, 10) : null);
           const { rows: saved } = await pool.query<{ id: string }>(
             `INSERT INTO bills (place_id, number, title, summary, status, introduced_at, last_action_at,
-                               source_url, source, external_id, latest_action_text, source_updated_at, fetched_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, now())
+                               source_url, source, external_id, latest_action_text, source_updated_at, fetched_at,
+                               subjects, category_id, category_auto)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, now(), $13, $14::uuid, $14::uuid IS NOT NULL)
              ON CONFLICT (source, external_id) DO UPDATE
                SET title = EXCLUDED.title, summary = EXCLUDED.summary, status = EXCLUDED.status,
+                   subjects = EXCLUDED.subjects, category_id = EXCLUDED.category_id,
+                   category_auto = EXCLUDED.category_auto,
                    last_action_at = EXCLUDED.last_action_at, latest_action_text = EXCLUDED.latest_action_text,
                    source_updated_at = EXCLUDED.source_updated_at, fetched_at = now()
              RETURNING id`,
@@ -202,6 +215,8 @@ export async function syncStateBills(
               b.id,
               b.latest_action_description ?? '',
               b.updated_at,
+              b.subject ?? [],
+              topicId.get(topicFromSubjects(b.subject ?? [], subjectMap) ?? '') ?? null,
             ],
           );
           for (const [leaderId, primary] of ids)

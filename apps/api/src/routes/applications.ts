@@ -146,7 +146,9 @@ export async function applicationRoutes(
         decision: 'approve' | 'reject';
         reasonCode: string;
       };
-      if (!(REASON_CODES.contributorApplication[decision] as readonly string[]).includes(reasonCode))
+      if (
+        !(REASON_CODES.contributorApplication[decision] as readonly string[]).includes(reasonCode)
+      )
         return reply.code(400).send({ error: 'reason_does_not_match_decision' });
       const { rows } = await pool.query<{ account_id: string; category_id: string }>(
         "SELECT account_id, category_id FROM contributor_applications WHERE id = $1 AND status = 'pending'",
@@ -180,10 +182,11 @@ export async function applicationRoutes(
   // --- Leader page claims -----------------------------------------------------------------
 
   async function leaderBySlug(slug: string) {
-    const { rows } = await pool.query<{ id: string; account_id: string | null; in_office: boolean }>(
-      'SELECT id, account_id, in_office FROM leaders WHERE slug = $1',
-      [slug],
-    );
+    const { rows } = await pool.query<{
+      id: string;
+      account_id: string | null;
+      in_office: boolean;
+    }>('SELECT id, account_id, in_office FROM leaders WHERE slug = $1', [slug]);
     return rows[0] ?? null;
   }
 
