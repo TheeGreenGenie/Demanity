@@ -498,6 +498,46 @@ export interface LogEntry {
   created_at: string;
 }
 
+export interface BillAction {
+  date: string;
+  text: string;
+  type: string;
+}
+
+export interface ExecutiveOrder {
+  documentNumber: string;
+  number: string | null;
+  title: string;
+  signingDate: string | null;
+  publicationDate: string;
+  president: string;
+  abstract: string;
+  url: string;
+  sourceName: string;
+}
+
+export interface Contribution {
+  id: string;
+  title: string;
+  body: string;
+  sourceUrl: string | null;
+  createdAt: string;
+  author: { username: string } | null;
+  placeName: string | null;
+  categorySlug: string | null;
+  categoryName: string | null;
+  votes: number;
+  myVote: boolean;
+}
+
+export interface PendingContribution {
+  id: string;
+  kind: 'missing_item' | 'bill_idea';
+  title: string;
+  body: string;
+  sourceUrl: string | null;
+}
+
 export type FollowKind = 'community' | 'user' | 'leader' | 'place' | 'bill';
 
 export interface FollowedItem {
@@ -574,6 +614,43 @@ export const moderation = {
     id: string,
     body: { status: 'done' | 'removed' | 'merged'; reasonCode: string; mergeInto?: string },
   ) => request<{ status: string }>('PATCH', `/v1/leader-requests/${id}`, { token, body }),
+};
+
+export const bills = {
+  timeline: (id: string) => request<{ actions: BillAction[] }>('GET', `/v1/bills/${id}/timeline`),
+  posts: (token: string | null, id: string, cursor?: string | null) =>
+    request<Page<Post>>('GET', `/v1/bills/${id}/posts${q(cursor)}`, { token }),
+  createPost: (token: string, id: string, title: string, body: string) =>
+    request<Post>('POST', `/v1/bills/${id}/posts`, { token, body: { title, body } }),
+  executiveOrders: () => request<{ orders: ExecutiveOrder[] }>('GET', '/v1/executive-orders'),
+  contributions: (token: string | null, kind: 'missing_item' | 'bill_idea') =>
+    request<{ contributions: Contribution[] }>('GET', `/v1/contributions?kind=${kind}`, { token }),
+  contribute: (
+    token: string,
+    body: {
+      kind: 'missing_item' | 'bill_idea';
+      title: string;
+      body: string;
+      sourceUrl?: string;
+      category?: string;
+    },
+  ) => request<{ id: string; status: string }>('POST', '/v1/contributions', { token, body }),
+  voteIdea: (token: string, id: string, on: boolean) =>
+    request<void>(on ? 'PUT' : 'DELETE', `/v1/contributions/${id}/vote`, { token }),
+  pendingContributions: (token: string) =>
+    request<{ contributions: PendingContribution[] }>('GET', '/v1/moderation/contributions', {
+      token,
+    }),
+  decideContribution: (
+    token: string,
+    id: string,
+    decision: 'accept' | 'reject',
+    reasonCode: string,
+  ) =>
+    request<{ status: string }>('POST', `/v1/moderation/contributions/${id}/decision`, {
+      token,
+      body: { decision, reasonCode },
+    }),
 };
 
 export const civic = {
@@ -768,6 +845,7 @@ export function describeError(err: unknown): string {
     cannot_follow_self: 'You can’t follow yourself.',
     not_found: 'That could not be found.',
     already_voted: 'You already voted on this.',
+    source_required: 'Missing items need a link to an official source.',
     slow_mode: 'This thread is busy. To keep it readable, you can comment once every 2 minutes.',
     already_appealed: 'You already appealed this.',
     only_the_author_can_appeal: 'Only the author can appeal.',

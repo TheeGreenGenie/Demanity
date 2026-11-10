@@ -16,6 +16,7 @@ import {
 } from '@/components/civic';
 import { Button, ErrorText } from '@/components/form';
 import { ContextNotes, ModeratorPanel } from '@/components/moderation-tools';
+import { BillDiscussion, BillTimeline } from '@/components/bill-sections';
 import { Screen } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
 import { Brand, Radius, Spacing } from '@/constants/theme';
@@ -181,6 +182,7 @@ export default function BillScreen() {
         <ErrorText message={error} />
       </View>
 
+      <BillTimeline billId={bill.id} />
       <Section title="Sponsors">
         {bill.sponsors.map((s) => (
           <Pressable
@@ -205,6 +207,7 @@ export default function BillScreen() {
           </Pressable>
         ))}
       </Section>
+      <BillDiscussion billId={bill.id} />
     </Screen>
   );
 }

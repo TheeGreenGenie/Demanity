@@ -112,6 +112,32 @@ function fakeApi() {
         },
       });
     }
+    if (url.pathname.endsWith('/actions'))
+      return Response.json({
+        actions: [
+          {
+            actionDate: '2026-10-01',
+            text: 'Referred to the Committee on Finance.',
+            type: 'IntroReferral',
+          },
+          { actionDate: '2026-09-30', text: 'Introduced in Senate', type: 'IntroReferral' },
+        ],
+      });
+    if (url.pathname.endsWith('/summaries'))
+      return Response.json({
+        summaries: [
+          {
+            actionDate: '2026-09-30',
+            text: '<p>Old &amp; outdated.</p>',
+            updateDate: '2026-10-01T00:00:00Z',
+          },
+          {
+            actionDate: '2026-10-01',
+            text: '<p><strong>Clinic Access Act</strong></p><p>This bill expands clinic hours &amp; access.</p>',
+            updateDate: '2026-10-05T00:00:00Z',
+          },
+        ],
+      });
     const detail = DETAIL[url.pathname];
     return detail ? Response.json(detail) : new Response('{}', { status: 404 });
   }) as unknown as typeof fetch;
@@ -204,6 +230,19 @@ describe('syncCongressBills', () => {
       "SELECT (SELECT count(*)::int FROM bills WHERE source = 'congress.gov') AS bills, (SELECT count(*)::int FROM leaders WHERE source = 'congress.gov') AS leaders",
     );
     expect(n[0]).toEqual({ bills: 2, leaders: 2 });
+
+    // Timeline and the latest CRS summary, as plain text.
+    const { rows: tl } = await pool.query(
+      "SELECT a.seq, a.text FROM bill_actions a JOIN bills b ON b.id = a.bill_id WHERE b.external_id = 'us:119:s:42' ORDER BY a.seq",
+    );
+    expect(tl.map((r) => r.text)).toEqual([
+      'Referred to the Committee on Finance.',
+      'Introduced in Senate',
+    ]);
+    const { rows: sum } = await pool.query(
+      "SELECT summary FROM bills WHERE external_id = 'us:119:s:42'",
+    );
+    expect(sum[0].summary).toBe('Clinic Access Act\nThis bill expands clinic hours & access.');
     const second = api.seen.filter((u) => u.includes('/v3/bill?'))[1];
     expect(second).toContain('fromDateTime=2026-11-10T12%3A00%3A00Z');
 

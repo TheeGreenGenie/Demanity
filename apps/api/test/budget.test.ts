@@ -44,6 +44,8 @@ function fakeApi(n: number, opts: { tooMany?: boolean } = {}) {
         pagination: {},
       });
     }
+    if (url.pathname.endsWith('/actions')) return Response.json({ actions: [] });
+    if (url.pathname.endsWith('/summaries')) return Response.json({ summaries: [] });
     const num = Number(url.pathname.split('/').pop());
     return Response.json({ bill: { ...item(num), sponsors: [] } });
   }) as unknown as typeof fetch;
@@ -99,8 +101,8 @@ describe('ingest caps', () => {
 describe('sync under a budget', () => {
   it('stops cleanly when the hour’s budget is used up and resumes later', async () => {
     const api = fakeApi(5);
-    // Budget for the list request + 2 details only.
-    const budget = new ApiBudget(pool, 'congress.gov', { perHour: 3, minIntervalMs: 0 });
+    // Budget for the list request + bill 1 (detail, actions, summaries) + bill 2's detail.
+    const budget = new ApiBudget(pool, 'congress.gov', { perHour: 5, minIntervalMs: 0 });
     const client = new CongressClient('k', api.fn, budget);
     const now = new Date('2026-11-10T12:00:00Z');
     const r = await syncCongressBills(pool, client, {
@@ -109,7 +111,7 @@ describe('sync under a budget', () => {
     });
     expect(r.bills).toBe(2);
     expect(r.stoppedEarly).toMatch(/budget used up/);
-    expect(api.calls()).toBe(3); // never exceeded the budget
+    expect(api.calls()).toBe(5); // never exceeded the budget
     const { rows } = await pool.query(
       "SELECT synced_through, last_error FROM sync_state WHERE source = 'congress.gov'",
     );

@@ -63,6 +63,11 @@ export const REASON_CODES = {
     uphold: ['removal_not_justified', 'note_not_supported'],
     deny: ['removal_justified', 'note_supported'],
   },
+  // Member contributions: missing items and bill ideas (R24).
+  contribution: {
+    accept: ['contribution_verified'],
+    reject: ['not_verifiable', 'duplicate_contribution', 'off_topic', 'other_policy_violation'],
+  },
   recovery: {
     approve: ['ownership_plausible'],
     deny: ['ownership_not_established', 'suspected_takeover'],

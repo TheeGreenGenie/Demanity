@@ -11,10 +11,12 @@ import {
   ApiBudget,
   CONGRESS_BUDGET,
   COURTLISTENER_BUDGET,
+  FEDERALREGISTER_BUDGET,
   ingestCaps,
   OPENSTATES_BUDGET,
 } from './ingest/budget.js';
 import { CourtListenerClient, syncRulings } from './ingest/courtlistener.js';
+import { FederalRegisterClient, syncExecutiveOrders } from './ingest/federalregister.js';
 import { OpenStatesClient, syncStateBills } from './ingest/openstates.js';
 import { CongressClient, syncCongressBills } from './ingest/congress.js';
 import { deleteStalePendingAccounts } from './moderation/service.js';
@@ -142,6 +144,21 @@ if (svc.dataGovApiKey) {
         app.log.info(
           { rulings: r.rulings, dockets: r.dockets, stoppedEarly: r.stoppedEarly },
           'courtlistener sync complete',
+        ),
+      ),
+    );
+  }
+  // Executive orders need no key; one request per run.
+  {
+    const orders = new FederalRegisterClient(
+      fetch,
+      new ApiBudget(pool, 'federalregister', FEDERALREGISTER_BUDGET),
+    );
+    jobs.push(() =>
+      syncExecutiveOrders(pool, orders).then((r) =>
+        app.log.info(
+          { orders: r.orders, stoppedEarly: r.stoppedEarly },
+          'federal register sync complete',
         ),
       ),
     );

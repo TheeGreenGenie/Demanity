@@ -89,6 +89,49 @@ export class CongressClient {
       `/bill/${congress}/${type.toLowerCase()}/${encodeURIComponent(number)}`,
     );
   }
+
+  /**
+   * Action history, newest first: { actions: [{ actionDate, text, type, actionCode }] }
+   * (live check 2026-11-10). A bill without actions returns an empty list.
+   */
+  actions(congress: number, type: string, number: string) {
+    return this.get<{ actions?: Array<{ actionDate: string; text: string; type?: string }> }>(
+      `/bill/${congress}/${type.toLowerCase()}/${encodeURIComponent(number)}/actions`,
+      { limit: '50' },
+    );
+  }
+
+  /**
+   * CRS summaries: { summaries: [{ actionDate, actionDesc, text (HTML), updateDate,
+   * versionCode }] } (live check 2026-11-10). New bills often have none yet.
+   */
+  summaries(congress: number, type: string, number: string) {
+    return this.get<{
+      summaries?: Array<{
+        actionDate: string;
+        actionDesc?: string;
+        text: string;
+        updateDate: string;
+      }>;
+    }>(`/bill/${congress}/${type.toLowerCase()}/${encodeURIComponent(number)}/summaries`);
+  }
+}
+
+/** CRS summaries are HTML; keep plain text only (no markup is ever rendered). */
+export function htmlToText(html: string): string {
+  return html
+    .replace(/<\/(p|li|div|h\d)>/gi, '\n')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n\s*\n+/g, '\n\n')
+    .trim();
 }
 
 /** Congress.gov wants second precision: 2026-11-09T00:00:00Z. */
@@ -291,6 +334,39 @@ export async function syncCongressBills(
           ],
         );
         const billId = saved[0]!.id;
+
+        // Timeline and CRS summary (2 more requests, inside the same budget). If
+        // the budget runs out here the bill is already saved; the next run
+        // resumes from it (upserts are idempotent) and fills these in.
+        let acts: Awaited<ReturnType<CongressClient['actions']>>;
+        let sums: Awaited<ReturnType<CongressClient['summaries']>>;
+        try {
+          acts = await client.actions(item.congress, item.type, item.number);
+          sums = await client.summaries(item.congress, item.type, item.number);
+        } catch (err) {
+          if (err instanceof BudgetExhausted || err instanceof ProviderRateLimited) {
+            stoppedEarly = err.message;
+            bills++;
+            lastUpdate = item.updateDate;
+            break;
+          }
+          throw err;
+        }
+        await pool.query('DELETE FROM bill_actions WHERE bill_id = $1', [billId]);
+        for (const [seq, a] of (acts.actions ?? []).entries()) {
+          await pool.query(
+            'INSERT INTO bill_actions (bill_id, seq, action_date, text, type) VALUES ($1, $2, $3, $4, $5)',
+            [billId, seq, a.actionDate, a.text, a.type ?? ''],
+          );
+        }
+        const latest = [...(sums.summaries ?? [])].sort((x, y) =>
+          (y.updateDate ?? '').localeCompare(x.updateDate ?? ''),
+        )[0];
+        if (latest)
+          await pool.query('UPDATE bills SET summary = $2 WHERE id = $1', [
+            billId,
+            htmlToText(latest.text).slice(0, 6000),
+          ]);
         for (const [i, leaderId] of sponsorIds.entries()) {
           await pool.query(
             `INSERT INTO bill_sponsors (bill_id, leader_id, role) VALUES ($1, $2, $3)

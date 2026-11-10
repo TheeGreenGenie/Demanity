@@ -15,11 +15,13 @@ import {
   ApiBudget,
   CONGRESS_BUDGET,
   COURTLISTENER_BUDGET,
+  FEDERALREGISTER_BUDGET,
   ingestCaps,
   OPENSTATES_BUDGET,
 } from './budget.js';
 import { CongressClient, syncCongressBills } from './congress.js';
 import { CourtListenerClient, syncRulings } from './courtlistener.js';
+import { FederalRegisterClient, syncExecutiveOrders } from './federalregister.js';
 import { OpenStatesClient, syncStateBills } from './openstates.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -87,8 +89,13 @@ try {
     console.log(`CourtListener: ${r.dockets} case filings, ${r.rulings} opinions.`);
     if (r.stoppedEarly) console.log(`Stopped early: ${r.stoppedEarly}`);
     console.log(`Requests today: ${await budget.used('day')} of ${COURTLISTENER_BUDGET.perDay}.`);
+  } else if (values.source === 'orders') {
+    const budget = new ApiBudget(pool, 'federalregister', FEDERALREGISTER_BUDGET);
+    const r = await syncExecutiveOrders(pool, new FederalRegisterClient(fetch, budget));
+    console.log(`Federal Register: ${r.orders} executive orders.`);
+    if (r.stoppedEarly) console.log(`Stopped early: ${r.stoppedEarly}`);
   } else {
-    console.error('Use --source congress | states | courts');
+    console.error('Use --source congress | states | courts | orders');
     process.exit(2);
   }
   await recomputeRollups(pool);

@@ -157,6 +157,12 @@ export const queries = {
       ? listPosts(pool, viewerId, 'p.community_id = $2', [communityId], cursor)
       : rankedPosts(pool, viewerId, 'p.community_id = $2', [communityId], sort, cursor),
 
+  billPosts: (pool: Pool, viewerId: string | null, billId: string, cursor?: string) =>
+    listPosts(pool, viewerId, 'p.bill_id = $2', [billId], cursor).then(({ posts, next }) => ({
+      posts,
+      next,
+    })),
+
   userPosts: (pool: Pool, viewerId: string | null, authorId: string, cursor?: string) =>
     listPosts(pool, viewerId, 'p.author_id = $2', [authorId], cursor),
 

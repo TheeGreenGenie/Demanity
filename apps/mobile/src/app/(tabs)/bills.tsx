@@ -212,6 +212,20 @@ export default function BillsScreen() {
       title="Bills"
       subtitle="Swipe right to support, left to oppose. Tap a card for details."
     >
+      <View style={styles.links}>
+        <Button
+          title="Executive orders"
+          size="small"
+          variant="secondary"
+          onPress={() => router.push('/orders')}
+        />
+        <Button
+          title="Member bill ideas"
+          size="small"
+          variant="secondary"
+          onPress={() => router.push('/ideas')}
+        />
+      </View>
       <View style={styles.filters}>
         <Chips label="Level" options={LEVELS} value={level} onChange={setLevel} />
         {level === 'state' ? (
@@ -458,6 +472,7 @@ const styles = StyleSheet.create({
   bold: { fontWeight: 800 },
   center: { textAlign: 'center' },
   filters: { gap: Spacing.two },
+  links: { flexDirection: 'row', gap: Spacing.two, flexWrap: 'wrap' },
   topicButton: {
     flexDirection: 'row',
     alignItems: 'center',

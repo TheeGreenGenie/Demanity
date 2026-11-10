@@ -18,7 +18,8 @@
     "sample-data:clear": "tsx dev/run-clear-sample-data.ts",
     "ingest:congress": "tsx src/ingest/run.ts --source congress",
     "ingest:states": "tsx src/ingest/run.ts --source states",
-    "ingest:courts": "tsx src/ingest/run.ts --source courts"
+    "ingest:courts": "tsx src/ingest/run.ts --source courts",
+    "ingest:orders": "tsx src/ingest/run.ts --source orders"
   },
   "dependencies": {
     "@demanity/db": "workspace:*",

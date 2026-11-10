@@ -132,6 +132,12 @@ export const OPENSTATES_BUDGET: BudgetOptions = {
   perDay: 120,
   minIntervalMs: 12_000,
 };
+/** Federal Register: no published limit and no key; one request per run, gently capped. */
+export const FEDERALREGISTER_BUDGET: BudgetOptions = {
+  perMinute: 10,
+  perHour: 60,
+  minIntervalMs: 2000,
+};
 export const COURTLISTENER_BUDGET: BudgetOptions = {
   perMinute: 2,
   perHour: 25,

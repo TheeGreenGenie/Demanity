@@ -14,6 +14,8 @@ import {
   type PendingApplication,
   type PendingCitation,
   type PendingAppeal,
+  type PendingContribution,
+  bills,
   type PendingClaim,
   moderation,
 } from '@/lib/api';
@@ -40,6 +42,7 @@ export default function ModerationScreen() {
   const [apps, setApps] = useState<PendingApplication[]>([]);
   const [claims, setClaims] = useState<PendingClaim[]>([]);
   const [appeals, setAppeals] = useState<PendingAppeal[]>([]);
+  const [contribs, setContribs] = useState<PendingContribution[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
@@ -55,6 +58,10 @@ export default function ModerationScreen() {
     civic
       .pendingClaims(token)
       .then((r) => setClaims(r.claims))
+      .catch(() => undefined);
+    bills
+      .pendingContributions(token)
+      .then((r) => setContribs(r.contributions))
       .catch(() => undefined);
     moderation
       .pendingAppeals(token)
@@ -93,6 +100,24 @@ export default function ModerationScreen() {
           approveReason="essay_approved"
           rejectReasons={APP_REJECT}
           onDecide={(d, reason) => civic.decideApplication(token!, a.id, d, reason)}
+          onDone={load}
+        />
+      ))}
+      <Section
+        title={`Member suggestions (${contribs.length})`}
+        caption="Bill ideas and missing legislation. Check sources before accepting."
+      />
+      {contribs.map((c) => (
+        <DecisionCard
+          key={c.id}
+          heading={`${c.kind === 'bill_idea' ? 'Bill idea' : 'Missing item'}: ${c.title}${c.sourceUrl ? ` · ${c.sourceUrl}` : ''}`}
+          body={c.body}
+          approveReason="contribution_verified"
+          approveLabel="Accept"
+          rejectReasons={CONTRIB_REJECT}
+          onDecide={(d, reason) =>
+            bills.decideContribution(token!, c.id, d === 'approve' ? 'accept' : 'reject', reason)
+          }
           onDone={load}
         />
       ))}
@@ -140,6 +165,12 @@ const APP_REJECT = [
   { key: 'essay_insufficient', label: 'Not enough substance' },
   { key: 'essay_not_original', label: 'Not original' },
   { key: 'other_policy_violation', label: 'Other policy violation' },
+] as const;
+const CONTRIB_REJECT = [
+  { key: 'not_verifiable', label: 'Not verifiable' },
+  { key: 'duplicate_contribution', label: 'Duplicate' },
+  { key: 'off_topic', label: 'Off topic' },
+  { key: 'other_policy_violation', label: 'Other violation' },
 ] as const;
 const APPEAL_DENY_REMOVAL = [{ key: 'removal_justified', label: 'Removal was justified' }] as const;
 const APPEAL_DENY_NOTE = [{ key: 'note_supported', label: 'Note is supported' }] as const;

@@ -50,6 +50,12 @@ Demanity is a **government accountability** app. It tracks every new government 
   This is a heuristic. Pulling the full action history to determine status is a planned improvement.
 - **Not yet:** roll-call votes, cosponsors, summaries (Congress.gov publishes CRS summaries separately) and executive orders.
 
+### Bill pages, executive orders and member contributions, implemented
+- **Timeline and summary:** each Congress.gov bill also syncs its action history (`/actions`, up to 50, newest first) and its latest CRS summary (`/summaries`, converted from HTML to plain text). That is 2 more requests per bill, inside the same budget. A run that hits the budget mid-bill keeps the bill and fills these in on the next run.
+- **Discussion:** every bill page has a discussion. New posts are filed in the bill's topic community, or the state's community, or Government Operations & Politics, and are linked to the bill.
+- **Executive orders:** Federal Register API (no key), one request per run, newest 20 executive orders, each linked to its official document. The documentation site blocks automated readers, so the response shape was confirmed with a live request on 2026-11-10.
+- **Member contributions (R24):** "bill ideas" and "missing legislation". Missing items must link an approved source. Nothing is public until a moderator accepts it with a published reason. Members upvote bill ideas, one vote each.
+
 ### State bills (Open States), implemented
 - **Source:** Open States API v3, `GET /bills` with the key in the `X-API-KEY` header, `include=sponsorships&include=abstracts`, `sort=updated_asc`, `updated_since`, and at most 20 results per page. These details were checked in Open States' docs and open-source server.
 - **Coverage:** the 5 MVP states. Each state has its own cursor (`openstates:<state>`), and runs are idempotent upserts keyed by the Open States bill ID.
