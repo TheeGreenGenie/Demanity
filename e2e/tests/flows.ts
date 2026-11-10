@@ -37,7 +37,7 @@ export async function signUp(page: Page, stack: Stack, prefix = 'e2e'): Promise<
   await expect(page.getByText('Verify your identity')).toBeVisible();
   await page.getByLabel('First name').fill('Edie');
   await page.getByLabel('Last name').fill('Tester');
-  await page.getByLabel('Date of birth').fill('1991-04-12');
+  await page.getByLabel('Date of birth').fill('04/12/1991'); // US format, as people type it
   await page.getByLabel('License state').fill('NY');
   await page.getByLabel('Driver’s license number').fill(`E2E${suffix.toUpperCase()}99`);
   await page.getByRole('button', { name: 'Verify' }).click();

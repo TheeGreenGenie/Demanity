@@ -154,7 +154,10 @@ export const api = {
   passkeyRegistrationOptions: (token: string) =>
     request<Record<string, unknown>>('POST', '/v1/me/passkeys/options', { token }),
   registerPasskey: (token: string, response: unknown) =>
-    request<{ credentialId: string }>('POST', '/v1/me/passkeys', { token, body: { response } }),
+    request<{ credentialId: string; token: string }>('POST', '/v1/me/passkeys', {
+      token,
+      body: { response },
+    }),
   passkeySignInOptions: () =>
     request<{ challengeId: string; options: Record<string, unknown> }>(
       'POST',

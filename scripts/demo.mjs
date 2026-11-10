@@ -5,6 +5,7 @@
 
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { createConnection } from 'node:net';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -31,6 +32,19 @@ for (const port of [3000, 3100, 8081]) {
   }
 }
 
+// Fresh local rate-limit counters, so earlier test runs can't lock you out
+// (production limits allow 5 sign-ups and 5 verifications per hour per network).
+process.loadEnvFile(envFile);
+const redisUrl = process.env.REDIS_URL ?? 'redis://127.0.0.1:6379';
+const redisHost = new URL(redisUrl).hostname;
+if (redisHost === '127.0.0.1' || redisHost === 'localhost') {
+  const { Redis } = createRequire(join(root, 'apps/api/package.json'))('ioredis');
+  const redis = new Redis(redisUrl, { maxRetriesPerRequest: 1 });
+  const keys = await redis.keys('demanity-rl:*');
+  if (keys.length) await redis.del(...keys);
+  redis.disconnect();
+}
+
 const procs = [];
 const run = (name, cmd, args, cwd, opts = {}) => {
   const p = spawn(cmd, args, { cwd: join(root, cwd), stdio: ['ignore', 'pipe', 'pipe'], ...opts });
@@ -50,6 +64,9 @@ run('web', 'pnpm', ['exec', 'expo', 'serve', 'dist', '--port', '8081'], 'apps/mo
 });
 
 console.log('\nDemanity is starting:  http://localhost:8081');
+console.log(
+  'Development mode: any license number works (except ones starting with REJECT/REVIEW).',
+);
 console.log('Email codes appear below, tagged [vault] (no real email is sent in development).');
 console.log('Press Ctrl+C to stop.\n');
 

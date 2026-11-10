@@ -6,18 +6,17 @@ import { Screen } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
 import { api, ApiError, describeError, type IdentityForm } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
-import {
-  authenticateWithPasskey,
-  createPasskey,
-  passkeysSupported,
-  passkeyUnsupportedReason,
-} from '@/lib/passkey';
+import { createPasskey, passkeysSupported, passkeyUnsupportedReason } from '@/lib/passkey';
+import { parseBirthDate, validateEmail, validateIdentity } from '@/lib/validation';
 
 /**
  * Sign-up flow, driven entirely by the account status the API reports:
  *   pending  → identity verification
  *   verified → email 2FA (free, vault-generated code)
- *   active   → register a passkey (web for now), then sign in with it
+ *   active   → register a passkey (web for now), which also signs you in
+ *
+ * Buttons are never silently disabled: pressing one either proceeds or shows
+ * exactly which field needs fixing.
  */
 export default function OnboardingScreen() {
   const { me } = useAuth();
@@ -51,6 +50,7 @@ function IdentityStep() {
   const { token, refresh } = useAuth();
   const { busy, error, run } = useStep();
   const [review, setReview] = useState(false);
+  const [attempted, setAttempted] = useState(false);
   const [form, setForm] = useState<IdentityForm>({
     firstName: '',
     lastName: '',
@@ -59,20 +59,19 @@ function IdentityStep() {
     licenseNumber: '',
   });
   const set = (k: keyof IdentityForm) => (v: string) => setForm((f) => ({ ...f, [k]: v }));
-  const complete =
-    form.firstName.trim() !== '' &&
-    form.lastName.trim() !== '' &&
-    /^\d{4}-\d{2}-\d{2}$/.test(form.birthDate) &&
-    /^[A-Za-z]{2}$/.test(form.state) &&
-    form.licenseNumber.trim().length >= 4;
+  // Errors appear after the first attempt, then update live as fields are fixed.
+  const errors = validateIdentity(form);
+  const shown = attempted ? errors : {};
 
-  const submit = () =>
-    run(async () => {
+  const submit = () => {
+    setAttempted(true);
+    if (Object.keys(errors).length > 0) return;
+    void run(async () => {
       const res = await api.verifyIdentity(token!, {
-        ...form,
         firstName: form.firstName.trim(),
         lastName: form.lastName.trim(),
-        state: form.state.toUpperCase(),
+        birthDate: parseBirthDate(form.birthDate)!,
+        state: form.state.trim().toUpperCase(),
         licenseNumber: form.licenseNumber.trim(),
       });
       if (res.review) {
@@ -81,6 +80,7 @@ function IdentityStep() {
       }
       await refresh();
     });
+  };
 
   if (review) {
     return (
@@ -94,28 +94,32 @@ function IdentityStep() {
   return (
     <Screen
       title="Verify your identity"
-      subtitle="Demanity is for US residents 18 and over with a US driver’s license. Your details go to our verification partner to confirm them, and are never stored by Demanity."
+      subtitle="Demanity is for people 18 and over with a US driver’s license. Your details go to our verification partner to confirm them, and are never stored by Demanity."
     >
       <Field
         label="First name"
         value={form.firstName}
         onChangeText={set('firstName')}
         autoComplete="name-given"
+        error={shown.firstName}
       />
       <Field
         label="Last name"
         value={form.lastName}
         onChangeText={set('lastName')}
         autoComplete="name-family"
+        error={shown.lastName}
       />
       <Field
         label="Date of birth"
-        hint="YYYY-MM-DD"
+        hint="MM/DD/YYYY"
+        placeholder="MM/DD/YYYY"
         value={form.birthDate}
         onChangeText={set('birthDate')}
         autoComplete="birthdate-full"
         keyboardType="numbers-and-punctuation"
         maxLength={10}
+        error={shown.birthDate}
       />
       <Field
         label="License state"
@@ -124,6 +128,7 @@ function IdentityStep() {
         onChangeText={(v) => set('state')(v.toUpperCase())}
         autoCapitalize="characters"
         maxLength={2}
+        error={shown.state}
       />
       <Field
         label="Driver’s license number"
@@ -133,9 +138,13 @@ function IdentityStep() {
         autoCorrect={false}
         autoComplete="off"
         maxLength={30}
+        error={shown.licenseNumber}
       />
+      {attempted && Object.keys(errors).length > 0 ? (
+        <ErrorText message="Please fix the highlighted fields." />
+      ) : null}
       <ErrorText message={error} />
-      <Button title="Verify" onPress={submit} busy={busy} disabled={!complete} />
+      <Button title="Verify" onPress={submit} busy={busy} />
     </Screen>
   );
 }
@@ -146,18 +155,28 @@ function EmailStep() {
   const [email, setEmail] = useState('');
   const [sent, setSent] = useState(false);
   const [code, setCode] = useState('');
+  const [emailError, setEmailError] = useState<string | undefined>();
+  const [codeError, setCodeError] = useState<string | undefined>();
 
-  const send = () =>
-    run(async () => {
+  const send = () => {
+    const problem = validateEmail(email) ?? undefined;
+    setEmailError(problem);
+    if (problem) return;
+    void run(async () => {
       await api.setEmail(token!, email.trim());
       setSent(true);
     });
+  };
 
-  const confirm = () =>
-    run(async () => {
-      await api.confirmEmail(token!, code.trim());
+  const confirm = () => {
+    const problem = /^\d{6}$/.test(code) ? undefined : 'Enter all 6 digits from the email.';
+    setCodeError(problem);
+    if (problem) return;
+    void run(async () => {
+      await api.confirmEmail(token!, code);
       await refresh();
     });
+  };
 
   return (
     <Screen
@@ -172,9 +191,10 @@ function EmailStep() {
         autoComplete="email"
         keyboardType="email-address"
         editable={!sent}
+        error={emailError}
       />
       {!sent ? (
-        <Button title="Send code" onPress={send} busy={busy} disabled={!email.includes('@')} />
+        <Button title="Send code" onPress={send} busy={busy} />
       ) : (
         <>
           <Field
@@ -185,8 +205,9 @@ function EmailStep() {
             keyboardType="number-pad"
             autoComplete="one-time-code"
             maxLength={6}
+            error={codeError}
           />
-          <Button title="Confirm" onPress={confirm} busy={busy} disabled={code.length !== 6} />
+          <Button title="Confirm" onPress={confirm} busy={busy} />
           <Button
             title="Use a different email"
             variant="secondary"
@@ -205,16 +226,14 @@ function PasskeyStep() {
   const { busy, error, run } = useStep();
   const supported = passkeysSupported();
 
+  // One device prompt: creating the passkey requires your fingerprint, face or
+  // PIN, so the server signs you in with it directly (no second prompt).
   const register = () =>
     run(async () => {
       const options = await api.passkeyRegistrationOptions(token!);
       const response = await createPasskey(options);
-      await api.registerPasskey(token!, response);
-      // Registering a passkey does not upgrade the sign-up session; sign in with it now.
-      const { challengeId, options: signInOptions } = await api.passkeySignInOptions();
-      const assertion = await authenticateWithPasskey(signInOptions);
-      const session = await api.passkeySignIn(challengeId, assertion);
-      await adopt(session.token);
+      const { token: fullSession } = await api.registerPasskey(token!, response);
+      await adopt(fullSession);
       router.replace('/account');
     });
 

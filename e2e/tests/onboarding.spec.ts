@@ -61,3 +61,39 @@ test('a second account for the same person is refused in the UI', async ({ page 
     await expect(page.getByText(expectText)).toBeVisible();
   }
 });
+
+test('the identity form explains every problem instead of silently blocking', async ({ page }) => {
+  await page.goto('/join');
+  await page.getByLabel('Username').fill(`e2e_form_${randomBytes(2).toString('hex')}`);
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await expect(page.getByText('Verify your identity')).toBeVisible();
+
+  // Submit with mistakes: the button works and each field says what to fix.
+  await page.getByLabel('Date of birth').fill('13/45/1990');
+  await page.getByLabel('License state').fill('ZZ');
+  await page.getByLabel('Driver’s license number').fill('12');
+  await page.getByRole('button', { name: 'Verify' }).click();
+  await expect(page.getByText('Please fix the highlighted fields.')).toBeVisible();
+  await expect(page.getByText('Use the format MM/DD/YYYY, for example 07/04/1990.')).toBeVisible();
+  await expect(
+    page.getByText('Use the two-letter state code from your license, for example CA.'),
+  ).toBeVisible();
+  await expect(
+    page.getByText('Enter the full license number (at least 4 characters).'),
+  ).toBeVisible();
+  await expect(
+    page.getByText('Enter your first name as it appears on your license.'),
+  ).toBeVisible();
+
+  // Fixing the fields clears the messages and lets verification proceed.
+  await page.getByLabel('First name').fill('Fix');
+  await page.getByLabel('Last name').fill('Itt');
+  await page.getByLabel('Date of birth').fill('07/04/1990');
+  await page.getByLabel('License state').fill('PA');
+  await page
+    .getByLabel('Driver’s license number')
+    .fill(`FIX${randomBytes(3).toString('hex').toUpperCase()}`);
+  await expect(page.getByText('Please fix the highlighted fields.')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Verify' }).click();
+  await expect(page.getByText('Confirm your email')).toBeVisible();
+});

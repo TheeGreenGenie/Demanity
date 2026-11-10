@@ -241,11 +241,20 @@ export async function accountRoutes(app: FastifyInstance, deps: AccountRouteDeps
     },
     async (req, reply) => {
       const response = (req.body as { response: RegistrationResponseJSON }).response;
-      const recovery = req.session!.scope === 'recovery';
+      const scope = req.session!.scope;
       try {
-        const result = await passkeys.register(req.session!.accountId, response, recovery);
-        if (recovery && req.sessionToken) await deleteSession(pool, req.sessionToken);
-        return reply.code(201).send(result);
+        const result = await passkeys.register(
+          req.session!.accountId,
+          response,
+          scope === 'recovery',
+        );
+        if (scope === 'full') return reply.code(201).send(result);
+        // Onboarding/recovery: registration required user verification on the
+        // device, so swap the limited session for a full one (single device
+        // prompt instead of "create, then sign in again"). The old session ends.
+        if (req.sessionToken) await deleteSession(pool, req.sessionToken);
+        const token = await createSession(pool, req.session!.accountId, 'full');
+        return reply.code(201).send({ ...result, token });
       } catch (err) {
         return sendPasskeyError(reply, err);
       }

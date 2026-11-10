@@ -14,26 +14,32 @@ import { useTheme } from '@/hooks/use-theme';
 export function Field({
   label,
   hint,
+  error,
   ...input
-}: TextInputProps & { label: string; hint?: string }) {
+}: TextInputProps & { label: string; hint?: string; error?: string | undefined }) {
   const theme = useTheme();
   return (
     <View style={styles.field}>
       <ThemedText type="smallBold">{label}</ThemedText>
       <TextInput
         accessibilityLabel={label}
+        accessibilityHint={error ?? hint}
         placeholderTextColor={theme.textSecondary}
         style={[
           styles.input,
           {
             color: theme.text,
-            borderColor: theme.backgroundSelected,
+            borderColor: error ? Brand.danger : theme.backgroundSelected,
             backgroundColor: theme.background,
           },
         ]}
         {...input}
       />
-      {hint ? (
+      {error ? (
+        <ThemedText type="small" accessibilityRole="alert" style={styles.error}>
+          {error}
+        </ThemedText>
+      ) : hint ? (
         <ThemedText type="small" themeColor="textSecondary">
           {hint}
         </ThemedText>
