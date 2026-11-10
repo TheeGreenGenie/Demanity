@@ -1,3 +1,4 @@
+import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
 import Fastify, { type FastifyInstance, type FastifyServerOptions } from 'fastify';
 import type { Redis } from 'ioredis';
@@ -53,6 +54,15 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
 
   if (options.deps) {
     const { pool, vault, challenges, rp, rateLimit: rl } = options.deps;
+    // CORS: only the app's own origins (the same list WebAuthn trusts). Bearer
+    // tokens, not cookies, so credentials are never sent cross-origin.
+    await app.register(cors, {
+      origin: rp.origins,
+      methods: ['GET', 'POST', 'PUT', 'DELETE'],
+      allowedHeaders: ['authorization', 'content-type'],
+      credentials: false,
+      maxAge: 600,
+    });
     await app.register(rateLimit, {
       max: 300,
       timeWindow: '1 minute',

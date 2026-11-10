@@ -1,0 +1,17 @@
+{
+  "name": "@demanity/e2e",
+  "version": "0.0.0",
+  "private": true,
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "scripts": {
+    "e2e": "playwright test",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.65.0",
+    "@types/node": "^24.19.2",
+    "ioredis": "^6.0.0",
+    "typescript": "~6.0.3"
+  }
+}
