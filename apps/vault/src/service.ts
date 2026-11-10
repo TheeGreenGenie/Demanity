@@ -3,6 +3,7 @@ import { decrypt, encrypt, type Envelope, type KeyProvider } from './crypto/enve
 import type { Keyring } from './crypto/keys.js';
 import { lookupHash, normalizeEmail, normalizeUsPhone } from './crypto/lookup.js';
 import { computeAllTokens, computeToken, type LicenseAttributes } from './crypto/token.js';
+import { OtpRateLimitedError } from './providers/otp.js';
 import type { Channel, TwoFactorProvider } from './providers/two-factor.js';
 import {
   ageInYears,
@@ -22,7 +23,9 @@ export class VaultError extends Error {
       | 'unknown_account'
       | 'contact_in_use'
       | 'no_contact'
-      | 'invalid_input',
+      | 'invalid_input'
+      | 'channel_unavailable'
+      | 'too_many_codes',
     message?: string,
   ) {
     super(message ?? code);
@@ -133,6 +136,7 @@ export class VaultService {
 
   /** Stores (or replaces) the account's email or phone, encrypted. Unverified until a code is checked. */
   async setContact(accountId: string, channel: Channel, value: string): Promise<void> {
+    if (!this.d.twoFactor.supports(channel)) throw new VaultError('channel_unavailable');
     const identity = await this.identityForAccount(accountId);
     const kind = VaultService.kindOf(channel);
     const normalized = this.normalizeContact(channel, value);
@@ -178,14 +182,20 @@ export class VaultService {
   }
 
   async startTwoFactor(accountId: string, channel: Channel): Promise<void> {
+    if (!this.d.twoFactor.supports(channel)) throw new VaultError('channel_unavailable');
     const { to } = await this.contactValue(accountId, channel);
-    await this.d.twoFactor.start(to, channel);
+    try {
+      await this.d.twoFactor.start(to, channel);
+    } catch (err) {
+      if (err instanceof OtpRateLimitedError) throw new VaultError('too_many_codes');
+      throw err;
+    }
   }
 
   async checkTwoFactor(accountId: string, channel: Channel, code: string): Promise<boolean> {
     if (!/^\d{4,10}$/.test(code)) return false;
     const { identityId, to } = await this.contactValue(accountId, channel);
-    const ok = await this.d.twoFactor.check(to, code);
+    const ok = await this.d.twoFactor.check(to, code, channel);
     if (ok) {
       await this.d.pool.query(
         'UPDATE contacts SET verified_at = now() WHERE identity_id = $1 AND kind = $2',

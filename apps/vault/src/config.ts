@@ -1,7 +1,10 @@
+import type { Pool } from '@demanity/db';
 import { LocalKeyProvider, type KeyProvider } from './crypto/envelope.js';
 import { parseKey, parseKeyring, type Keyring } from './crypto/keys.js';
+import { DevConsoleEmailSender, ResendEmailSender, type EmailSender } from './providers/email.js';
+import { EmailOtpProvider } from './providers/otp.js';
 import {
-  InMemoryTwoFactorProvider,
+  ChannelRouter,
   TwilioVerifyProvider,
   type TwoFactorProvider,
 } from './providers/two-factor.js';
@@ -17,7 +20,9 @@ export interface VaultConfig {
   lookupKey: Buffer;
   keyProvider: KeyProvider;
   verifier: IdentityVerifier;
-  twoFactor: TwoFactorProvider;
+  emailSender: EmailSender;
+  /** Optional, paid after Twilio's free trial: only enabled when credentials are set. */
+  sms: TwilioVerifyProvider | null;
 }
 
 function required(env: NodeJS.ProcessEnv, name: string): string {
@@ -39,17 +44,24 @@ export function loadVaultConfig(env: NodeJS.ProcessEnv = process.env): VaultConf
     throw new Error('Production requires the SheerID verifier adapter (not yet implemented)');
   }
 
-  const twoFactor: TwoFactorProvider = env.TWILIO_VERIFY_SERVICE_SID
+  // Email 2FA (default, free): vault-generated codes, delivered by Resend when configured.
+  let emailSender: EmailSender;
+  if (env.RESEND_API_KEY) {
+    emailSender = new ResendEmailSender(env.RESEND_API_KEY, required(env, 'EMAIL_FROM'));
+  } else if (production) {
+    throw new Error('Production requires RESEND_API_KEY and EMAIL_FROM for email 2FA');
+  } else {
+    emailSender = new DevConsoleEmailSender();
+  }
+
+  // SMS 2FA (optional): Twilio Verify, intended for the free trial only.
+  const sms = env.TWILIO_VERIFY_SERVICE_SID
     ? new TwilioVerifyProvider({
         accountSid: required(env, 'TWILIO_ACCOUNT_SID'),
         authToken: required(env, 'TWILIO_AUTH_TOKEN'),
         serviceSid: env.TWILIO_VERIFY_SERVICE_SID,
       })
-    : production
-      ? (() => {
-          throw new Error('Production requires Twilio Verify credentials');
-        })()
-      : new InMemoryTwoFactorProvider();
+    : null;
 
   return {
     host: env.VAULT_HOST ?? '127.0.0.1',
@@ -61,6 +73,15 @@ export function loadVaultConfig(env: NodeJS.ProcessEnv = process.env): VaultConf
     lookupKey: parseKey(env.VAULT_LOOKUP_KEY, 'VAULT_LOOKUP_KEY'),
     keyProvider: new LocalKeyProvider(parseKey(env.VAULT_LOCAL_KEK, 'VAULT_LOCAL_KEK')),
     verifier: new FakeVerifier(), // replaced by the SheerID adapter once access is granted
-    twoFactor,
+    emailSender,
+    sms,
   };
+}
+
+/** Email is always available (free); SMS only when Twilio is configured. */
+export function buildTwoFactor(config: VaultConfig, pool: Pool): TwoFactorProvider {
+  return new ChannelRouter({
+    email: new EmailOtpProvider(pool, config.lookupKey, config.emailSender),
+    ...(config.sms ? { sms: config.sms } : {}),
+  });
 }

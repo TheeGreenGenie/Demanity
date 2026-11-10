@@ -1,7 +1,8 @@
 import { randomBytes } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { loadVaultConfig } from '../src/config.js';
-import { InMemoryTwoFactorProvider, TwilioVerifyProvider } from '../src/providers/two-factor.js';
+import { DevConsoleEmailSender, ResendEmailSender } from '../src/providers/email.js';
+import { TwilioVerifyProvider } from '../src/providers/two-factor.js';
 
 const key = () => randomBytes(32).toString('base64');
 const dev = () => ({
@@ -13,20 +14,31 @@ const dev = () => ({
 });
 
 describe('vault config', () => {
-  it('uses development stand-ins when no providers are configured', () => {
+  it('defaults to free email 2FA with a dev console sender and no SMS', () => {
     const c = loadVaultConfig(dev());
-    expect(c.twoFactor).toBeInstanceOf(InMemoryTwoFactorProvider);
+    expect(c.emailSender).toBeInstanceOf(DevConsoleEmailSender);
+    expect(c.sms).toBeNull();
     expect(c.port).toBe(3100);
   });
 
-  it('uses Twilio Verify when its credentials are present', () => {
+  it('uses Resend for email when configured', () => {
+    const c = loadVaultConfig({
+      ...dev(),
+      RESEND_API_KEY: 're_test',
+      EMAIL_FROM: 'Demanity <codes@example.org>',
+    });
+    expect(c.emailSender).toBeInstanceOf(ResendEmailSender);
+    expect(() => loadVaultConfig({ ...dev(), RESEND_API_KEY: 're_test' })).toThrow(/EMAIL_FROM/);
+  });
+
+  it('enables optional SMS via Twilio Verify only when credentials are present', () => {
     const c = loadVaultConfig({
       ...dev(),
       TWILIO_ACCOUNT_SID: 'AC1',
       TWILIO_AUTH_TOKEN: 't',
       TWILIO_VERIFY_SERVICE_SID: 'VA1',
     });
-    expect(c.twoFactor).toBeInstanceOf(TwilioVerifyProvider);
+    expect(c.sms).toBeInstanceOf(TwilioVerifyProvider);
   });
 
   it('fails closed in production without real providers and a KMS', () => {

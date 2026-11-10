@@ -26,6 +26,8 @@ const STATUS: Record<VaultError['code'], number> = {
   contact_in_use: 409,
   no_contact: 404,
   invalid_input: 400,
+  channel_unavailable: 400,
+  too_many_codes: 429,
 };
 
 const uuid = { type: 'string', pattern: '^[0-9a-fA-F-]{36}$' } as const;

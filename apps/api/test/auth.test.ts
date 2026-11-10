@@ -9,7 +9,9 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildVaultApp } from '../../vault/src/app.js';
 import { LocalKeyProvider } from '../../vault/src/crypto/envelope.js';
 import { parseKeyring } from '../../vault/src/crypto/keys.js';
-import { InMemoryTwoFactorProvider } from '../../vault/src/providers/two-factor.js';
+import { InMemoryEmailSender } from '../../vault/src/providers/email.js';
+import { EmailOtpProvider } from '../../vault/src/providers/otp.js';
+import { ChannelRouter } from '../../vault/src/providers/two-factor.js';
 import { FakeVerifier } from '../../vault/src/providers/verifier.js';
 import { VaultService } from '../../vault/src/service.js';
 import { buildApp } from '../src/app.js';
@@ -34,7 +36,7 @@ let vaultPool: Pool;
 const drops: Array<() => Promise<void>> = [];
 let vaultApp: FastifyInstance;
 let app: FastifyInstance;
-let twoFactor: InMemoryTwoFactorProvider;
+let mail: InMemoryEmailSender;
 
 beforeAll(async () => {
   const apiDb = await createTempDatabase();
@@ -45,16 +47,18 @@ beforeAll(async () => {
   await migrate(apiPool, join(here, '..', 'migrations'));
   await migrate(vaultPool, join(here, '..', '..', 'vault', 'migrations'));
 
-  twoFactor = new InMemoryTwoFactorProvider();
+  // Default production path: vault-generated email codes (no SMS configured).
+  mail = new InMemoryEmailSender();
+  const lookupKey = randomBytes(32);
   vaultApp = await buildVaultApp({
     serviceToken: VAULT_TOKEN,
     service: new VaultService({
       pool: vaultPool,
       tokenKeys: parseKeyring(`1:${randomBytes(32).toString('base64')}`, 'K'),
-      lookupKey: randomBytes(32),
+      lookupKey,
       keyProvider: new LocalKeyProvider(randomBytes(32)),
       verifier: new FakeVerifier(),
-      twoFactor,
+      twoFactor: new ChannelRouter({ email: new EmailOtpProvider(vaultPool, lookupKey, mail) }),
     }),
   });
 
@@ -82,10 +86,10 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await app.close();
-  await vaultApp.close();
-  await apiPool.end();
-  await vaultPool.end();
+  await app?.close();
+  await vaultApp?.close();
+  await apiPool?.end();
+  await vaultPool?.end();
   for (const d of drops) await d();
 });
 
@@ -126,7 +130,7 @@ async function onboard(username: string, email: string) {
     method: 'POST',
     url: '/v1/me/contacts/email/confirm',
     headers: auth,
-    payload: { code: twoFactor.sent.get(email)!.code },
+    payload: { code: mail.lastCode(email)! },
   });
   expect(confirmed.json()).toEqual({ status: 'active' });
 
@@ -262,7 +266,7 @@ describe('sign-up, verification, 2FA and passkeys', () => {
       method: 'POST',
       url: '/v1/me/contacts/email/confirm',
       headers: auth,
-      payload: { code: twoFactor.sent.get('origin@example.com')!.code },
+      payload: { code: mail.lastCode('origin@example.com')! },
     });
 
     for (const device of [
@@ -280,6 +284,28 @@ describe('sign-up, verification, 2FA and passkeys', () => {
       });
       expect(res.json()).toEqual({ error: 'verification_failed' });
     }
+  });
+});
+
+describe('2FA channels', () => {
+  it('refuses SMS when Twilio is not configured (email is the free default)', async () => {
+    const token = (
+      await app.inject({ method: 'POST', url: '/v1/accounts', payload: { username: 'sms_off' } })
+    ).json().token;
+    await app.inject({
+      method: 'POST',
+      url: '/v1/me/verification',
+      headers: bearer(token),
+      payload: identity(),
+    });
+    const res = await app.inject({
+      method: 'PUT',
+      url: '/v1/me/contacts/sms',
+      headers: bearer(token),
+      payload: { value: '(415) 555-2671' },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toEqual({ error: 'channel_unavailable' });
   });
 });
 
@@ -345,7 +371,7 @@ describe('lost-device recovery', () => {
       payload: {
         username: 'lost_phone',
         channel: 'email',
-        code: twoFactor.sent.get('lost@example.com')!.code,
+        code: mail.lastCode('lost@example.com')!,
       },
     });
     const recovery = bearer(ok.json().token);

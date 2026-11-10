@@ -12,6 +12,8 @@ export type VaultErrorCode =
   | 'contact_in_use'
   | 'no_contact'
   | 'invalid_input'
+  | 'channel_unavailable'
+  | 'too_many_codes'
   | 'internal';
 
 export class VaultClientError extends Error {

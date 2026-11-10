@@ -11,7 +11,8 @@
     "start": "node dist/server.js",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "twilio:trial": "pnpm build && node --env-file=../../.env scripts/twilio-trial-check.mjs"
   },
   "dependencies": {
     "@demanity/db": "workspace:*",

@@ -5,9 +5,11 @@
 export type Channel = 'sms' | 'email';
 
 export interface TwoFactorProvider {
+  /** Whether this provider can deliver codes on `channel`. */
+  supports(channel: Channel): boolean;
   start(to: string, channel: Channel): Promise<void>;
   /** Returns true only when the code is correct and unexpired. */
-  check(to: string, code: string): Promise<boolean>;
+  check(to: string, code: string, channel: Channel): Promise<boolean>;
 }
 
 /**
@@ -28,6 +30,10 @@ export class TwilioVerifyProvider implements TwoFactorProvider {
       throw new Error('Twilio Verify service SID must start with VA');
     this.base = `https://verify.twilio.com/v2/Services/${encodeURIComponent(opts.serviceSid)}`;
     this.auth = `Basic ${Buffer.from(`${opts.accountSid}:${opts.authToken}`).toString('base64')}`;
+  }
+
+  supports(channel: Channel): boolean {
+    return channel === 'sms';
   }
 
   private post(path: string, form: Record<string, string>) {
@@ -61,6 +67,10 @@ export class InMemoryTwoFactorProvider implements TwoFactorProvider {
 
   constructor(private readonly generate: () => string = () => '123456') {}
 
+  supports(): boolean {
+    return true;
+  }
+
   async start(to: string, channel: Channel): Promise<void> {
     this.sent.set(to, { code: this.generate(), channel });
   }
@@ -70,5 +80,31 @@ export class InMemoryTwoFactorProvider implements TwoFactorProvider {
     if (!entry || entry.code !== code) return false;
     this.sent.delete(to); // single use
     return true;
+  }
+}
+
+/**
+ * Routes each channel to its provider. Email (default, free) uses the vault's
+ * own codes; SMS uses Twilio Verify only when credentials are configured.
+ */
+export class ChannelRouter implements TwoFactorProvider {
+  constructor(private readonly routes: Partial<Record<Channel, TwoFactorProvider>>) {}
+
+  supports(channel: Channel): boolean {
+    return this.routes[channel]?.supports(channel) ?? false;
+  }
+
+  private route(channel: Channel): TwoFactorProvider {
+    const p = this.routes[channel];
+    if (!p) throw new Error(`No 2FA provider for channel ${channel}`);
+    return p;
+  }
+
+  start(to: string, channel: Channel) {
+    return this.route(channel).start(to, channel);
+  }
+
+  check(to: string, code: string, channel: Channel) {
+    return this.route(channel).check(to, code, channel);
   }
 }

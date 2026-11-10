@@ -6,7 +6,7 @@
 | Data | Where | Form |
 |---|---|---|
 | Uniqueness token | Identity vault | `HMAC-SHA256(vault_secret, normalized identity attributes)`. Irreversible. Raw values are discarded in memory ([ADR 0002](adr/0002-uniqueness-token-and-identity-vault.md)). |
-| 2FA email and/or phone (at least one required) | Identity vault | Encrypted with per-record data keys, which are wrapped by a key-management service. A separate keyed hash allows lookups. |
+| 2FA email (default) and/or phone (optional) | Identity vault | Encrypted with per-record data keys, which are wrapped by a key-management service. A separate keyed hash allows lookups. |
 | Passkey public keys | Activity DB | Public keys only. Private keys never leave the device. |
 | Pseudonymous account | Activity DB | Random ID, chosen username, and posts, comments, reactions and follows |
 | Poll ballots | Ballot store | **Not linked to any account** ([ADR 0005](adr/0005-unlinkable-ballots.md)) |
@@ -18,7 +18,8 @@
 
 **Third-party processors.** These services see limited data in order to deliver a function. They never see any political activity.
 - **SheerID** (identity verification): sees the identity attributes submitted during verification.
-- **Twilio Verify** (2FA codes): sees the user's phone number or email address when it sends a code.
+- **Resend** (default 2FA, email delivery only): sees the email address and the message containing the code. Demanity generates and checks codes itself and stores them only as hashes.
+- **Twilio Verify** (optional SMS 2FA, enabled only if configured): sees the phone number when it sends a code.
 
 ## 2. Separation
 - The **identity vault** is a separate service with its own database, its own credentials and its own key-management keys.
