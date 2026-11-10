@@ -17,6 +17,15 @@ export const REASON_CODES = {
     'spam',
     'other_policy_violation',
   ],
+  // Content is removed only for these (docs/MODERATION.md §1); everything else gets context.
+  content: [
+    'clear_misinformation',
+    'hate_speech',
+    'harassment',
+    'spam',
+    'doxxing',
+    'other_policy_violation',
+  ],
   recovery: {
     approve: ['ownership_plausible'],
     deny: ['ownership_not_established', 'suspected_takeover'],

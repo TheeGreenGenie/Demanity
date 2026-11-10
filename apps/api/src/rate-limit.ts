@@ -39,7 +39,7 @@ export function rateLimitKey(secret: Buffer, ip: string, now: Date = new Date())
 /** Per-route limits for costly or abuse-prone endpoints. */
 export type RouteLimit = { max: number; timeWindow: string };
 export type RouteLimits = Record<
-  'signup' | 'verification' | 'codeSend' | 'codeCheck' | 'signIn',
+  'signup' | 'verification' | 'codeSend' | 'codeCheck' | 'signIn' | 'post' | 'comment',
   RouteLimit
 >;
 
@@ -49,4 +49,6 @@ export const ROUTE_LIMITS: RouteLimits = {
   codeSend: { max: 5, timeWindow: '15 minutes' },
   codeCheck: { max: 10, timeWindow: '15 minutes' },
   signIn: { max: 30, timeWindow: '1 minute' },
+  post: { max: 10, timeWindow: '1 hour' },
+  comment: { max: 60, timeWindow: '1 hour' },
 };

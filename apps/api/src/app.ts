@@ -5,6 +5,7 @@ import type { Redis } from 'ioredis';
 import type { Pool } from '@demanity/db';
 import { ROUTE_LIMITS, rateLimitKey, type RouteLimits } from './rate-limit.js';
 import { moderationRoutes } from './routes/moderation.js';
+import { socialRoutes } from './routes/social.js';
 import { loadSession } from './auth/guard.js';
 import { Passkeys, type RelyingParty } from './auth/passkeys.js';
 import type { ChallengeStore } from './auth/challenges.js';
@@ -80,6 +81,9 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     );
     await app.register(async (scoped) =>
       moderationRoutes(scoped, { pool, vault, limits: rl.routeLimits ?? ROUTE_LIMITS }),
+    );
+    await app.register(async (scoped) =>
+      socialRoutes(scoped, { pool, limits: rl.routeLimits ?? ROUTE_LIMITS }),
     );
   }
 

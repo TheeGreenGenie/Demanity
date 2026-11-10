@@ -29,6 +29,8 @@ const RELAXED = {
   codeSend: relaxed,
   codeCheck: relaxed,
   signIn: relaxed,
+  post: relaxed,
+  comment: relaxed,
 };
 
 let apiPool: Pool;

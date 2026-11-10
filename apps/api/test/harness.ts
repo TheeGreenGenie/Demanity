@@ -81,6 +81,8 @@ export async function createHarness(): Promise<Harness> {
           codeSend: relaxed,
           codeCheck: relaxed,
           signIn: relaxed,
+          post: relaxed,
+          comment: relaxed,
         },
       },
     },
