@@ -56,6 +56,13 @@ export const REASON_CODES = {
     approve: ['identity_confirmed_official_channel'],
     reject: ['identity_not_confirmed', 'not_the_officeholder', 'other_policy_violation'],
   },
+  // Context notes (instead of removal).
+  contextNote: ['missing_context', 'misleading_claim', 'outdated_information'],
+  // Appeals, decided by a different moderator.
+  appeal: {
+    uphold: ['removal_not_justified', 'note_not_supported'],
+    deny: ['removal_justified', 'note_supported'],
+  },
   recovery: {
     approve: ['ownership_plausible'],
     deny: ['ownership_not_established', 'suspected_takeover'],

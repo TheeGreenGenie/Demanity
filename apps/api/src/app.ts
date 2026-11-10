@@ -6,6 +6,7 @@ import type { Pool } from '@demanity/db';
 import { ROUTE_LIMITS, rateLimitKey, type RouteLimits } from './rate-limit.js';
 import { ResponseCache } from './cache.js';
 import { applicationRoutes } from './routes/applications.js';
+import { contentModerationRoutes } from './routes/content-moderation.js';
 import { citationRoutes } from './routes/citations.js';
 import { civicRoutes } from './routes/civic.js';
 import { moderationRoutes } from './routes/moderation.js';
@@ -97,6 +98,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     await app.register(async (scoped) => civicRoutes(scoped, { pool, limits, cache }));
     await app.register(async (scoped) => citationRoutes(scoped, { pool, limits, cache }));
     await app.register(async (scoped) => applicationRoutes(scoped, { pool, limits }));
+    await app.register(async (scoped) => contentModerationRoutes(scoped, { pool, limits }));
   }
 
   return app;

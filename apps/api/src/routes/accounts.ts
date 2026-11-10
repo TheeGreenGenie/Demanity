@@ -1,3 +1,4 @@
+import { isModerator } from '../moderation/service.js';
 import { randomBytes, randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { AuthenticationResponseJSON, RegistrationResponseJSON } from '@simplewebauthn/server';
@@ -90,6 +91,8 @@ export async function accountRoutes(app: FastifyInstance, deps: AccountRouteDeps
       username: req.session!.username,
       status: req.session!.status,
       scope: req.session!.scope,
+      // Lets the app show moderator tools; the server still checks every action.
+      moderator: await isModerator(deps.pool, req.session!.accountId),
     }),
   );
 

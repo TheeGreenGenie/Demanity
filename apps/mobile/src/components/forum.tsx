@@ -253,10 +253,13 @@ export function ThreadedComments({
   comments,
   kind,
   onReply,
+  renderExtra,
 }: {
   comments: Comment[];
   kind: CommunityKind;
   onReply?: (c: Comment) => void;
+  /** Extra controls under a comment (moderator tools, appeal link). */
+  renderExtra?: (c: Comment) => ReactNode;
 }) {
   const theme = useTheme();
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -327,6 +330,7 @@ export function ThreadedComments({
                     ) : null}
                   </View>
                 ) : null}
+                {renderExtra?.(c)}
                 {render(c.id)}
               </View>
             </View>

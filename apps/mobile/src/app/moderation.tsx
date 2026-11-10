@@ -1,3 +1,4 @@
+import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { Linking, Pressable, StyleSheet, View } from 'react-native';
 
@@ -12,7 +13,9 @@ import {
   describeError,
   type PendingApplication,
   type PendingCitation,
+  type PendingAppeal,
   type PendingClaim,
+  moderation,
 } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 
@@ -31,10 +34,12 @@ const REJECT_REASONS = [
  * decisions on your own submissions.
  */
 export default function ModerationScreen() {
+  const router = useRouter();
   const { token } = useAuth();
   const [items, setItems] = useState<PendingCitation[] | null>(null);
   const [apps, setApps] = useState<PendingApplication[]>([]);
   const [claims, setClaims] = useState<PendingClaim[]>([]);
+  const [appeals, setAppeals] = useState<PendingAppeal[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
@@ -51,12 +56,21 @@ export default function ModerationScreen() {
       .pendingClaims(token)
       .then((r) => setClaims(r.claims))
       .catch(() => undefined);
+    moderation
+      .pendingAppeals(token)
+      .then((r) => setAppeals(r.appeals))
+      .catch(() => undefined);
   }, [token]);
   useEffect(load, [load]);
 
   return (
     <Screen title="Moderation" subtitle="Every decision cites a reason and is publicly logged.">
       <ErrorText message={error} />
+      <Button
+        title="Open the public moderation log"
+        variant="ghost"
+        onPress={() => router.push('/log')}
+      />
       <Section
         title={`Citations (${items?.length ?? 0})`}
         caption="Check that the source supports the claim."
@@ -79,6 +93,27 @@ export default function ModerationScreen() {
           approveReason="essay_approved"
           rejectReasons={APP_REJECT}
           onDecide={(d, reason) => civic.decideApplication(token!, a.id, d, reason)}
+          onDone={load}
+        />
+      ))}
+      <Section
+        title={`Appeals (${appeals.length})`}
+        caption="You can't decide an appeal against your own decision."
+      />
+      {appeals.map((a) => (
+        <DecisionCard
+          key={a.id}
+          heading={`Appeal of a ${a.targetType.replace('_', ' ')}${a.yourDecision ? ' · your decision (another moderator must review)' : ''}`}
+          body={a.statement}
+          approveReason={
+            a.targetType === 'context_note' ? 'note_not_supported' : 'removal_not_justified'
+          }
+          approveLabel="Uphold (reverse)"
+          rejectLabel="Deny"
+          rejectReasons={a.targetType === 'context_note' ? APPEAL_DENY_NOTE : APPEAL_DENY_REMOVAL}
+          onDecide={(d, reason) =>
+            moderation.decideAppeal(token!, a.id, d === 'approve' ? 'uphold' : 'deny', reason)
+          }
           onDone={load}
         />
       ))}
@@ -106,6 +141,8 @@ const APP_REJECT = [
   { key: 'essay_not_original', label: 'Not original' },
   { key: 'other_policy_violation', label: 'Other policy violation' },
 ] as const;
+const APPEAL_DENY_REMOVAL = [{ key: 'removal_justified', label: 'Removal was justified' }] as const;
+const APPEAL_DENY_NOTE = [{ key: 'note_supported', label: 'Note is supported' }] as const;
 const CLAIM_REJECT = [
   { key: 'identity_not_confirmed', label: 'Couldn’t confirm' },
   { key: 'not_the_officeholder', label: 'Not the officeholder' },
@@ -120,10 +157,14 @@ function DecisionCard({
   rejectReasons,
   onDecide,
   onDone,
+  approveLabel = 'Approve',
+  rejectLabel = 'Reject',
 }: {
   heading: string;
   body: string;
   approveReason: string;
+  approveLabel?: string;
+  rejectLabel?: string;
   rejectReasons: readonly { key: string; label: string }[];
   onDecide: (decision: 'approve' | 'reject', reason: string) => Promise<unknown>;
   onDone: () => void;
@@ -159,10 +200,15 @@ function DecisionCard({
       <ErrorText message={error} />
       <View style={styles.row}>
         <View style={styles.flex}>
-          <Button title="Reject" variant="secondary" onPress={() => decide('reject')} busy={busy} />
+          <Button
+            title={rejectLabel}
+            variant="secondary"
+            onPress={() => decide('reject')}
+            busy={busy}
+          />
         </View>
         <View style={styles.flex}>
-          <Button title="Approve" onPress={() => decide('approve')} busy={busy} />
+          <Button title={approveLabel} onPress={() => decide('approve')} busy={busy} />
         </View>
       </View>
     </View>

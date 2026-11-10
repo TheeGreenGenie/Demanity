@@ -83,6 +83,7 @@ export default function AccountScreen() {
         ))}
       </View>
       <ModeratorLink />
+      <Button title="Public moderation log" variant="ghost" onPress={() => router.push('/log')} />
       <Button
         title="Become a contributor"
         variant="secondary"

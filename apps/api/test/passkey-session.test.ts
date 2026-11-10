@@ -51,7 +51,12 @@ describe('passkey registration during sign-up', () => {
     expect(full).toMatch(/^[A-Za-z0-9_-]{43}$/);
 
     const me = await app.inject({ method: 'GET', url: '/v1/me', headers: bearer(full) });
-    expect(me.json()).toEqual({ username: 'one_prompt', status: 'active', scope: 'full' });
+    expect(me.json()).toEqual({
+      username: 'one_prompt',
+      status: 'active',
+      scope: 'full',
+      moderator: false,
+    });
     // The limited sign-up session is gone.
     expect((await app.inject({ method: 'GET', url: '/v1/me', headers: auth })).statusCode).toBe(
       401,

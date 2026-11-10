@@ -173,7 +173,12 @@ describe('sign-up, verification, 2FA and passkeys', () => {
       url: '/v1/me',
       headers: bearer(login.json().token),
     });
-    expect(me.json()).toEqual({ username: 'ida_wells', status: 'active', scope: 'full' });
+    expect(me.json()).toEqual({
+      username: 'ida_wells',
+      status: 'active',
+      scope: 'full',
+      moderator: false,
+    });
   });
 
   it('stores no identity data or contacts in the activity database', async () => {

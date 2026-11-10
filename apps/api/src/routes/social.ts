@@ -25,6 +25,9 @@ const cursorQuery = {
 
 const viewer = (req: FastifyRequest) => req.session?.accountId ?? null;
 
+/** Slow mode for heated threads (docs/MODERATION.md). */
+export const SLOW_MODE = { threshold: 20, windowMinutes: 10, perPersonSeconds: 120 } as const;
+
 async function communityBySlug(pool: Pool, s: string) {
   const { rows } = await pool.query<{
     id: string;
@@ -208,6 +211,16 @@ export async function socialRoutes(
       );
       if (!post[0]) return notFound(reply);
       if (post[0].status !== 'visible') return reply.code(409).send({ error: 'post_removed' });
+      // Slow mode (docs/MODERATION.md): in a heated thread (20+ comments in the
+      // last 10 minutes), each person may comment once every 2 minutes.
+      const { rows: heat } = await pool.query<{ recent: number; mine: number }>(
+        `SELECT (SELECT count(*)::int FROM comments WHERE post_id = $1 AND created_at > now() - interval '10 minutes') AS recent,
+                (SELECT count(*)::int FROM comments WHERE post_id = $1 AND author_id = $2
+                   AND created_at > now() - interval '2 minutes') AS mine`,
+        [postId, req.session!.accountId],
+      );
+      if ((heat[0]?.recent ?? 0) >= SLOW_MODE.threshold && (heat[0]?.mine ?? 0) > 0)
+        return reply.code(429).send({ error: 'slow_mode', retryAfterSeconds: 120 });
       if (parentId) {
         const { rowCount } = await pool.query(
           'SELECT 1 FROM comments WHERE id = $1 AND post_id = $2',
@@ -479,8 +492,8 @@ export async function socialRoutes(
         return reply.code(403).send({ error: 'cannot_decide_own_case' });
       }
       const { rowCount } = await pool.query(
-        "UPDATE posts SET status = 'removed', removed_reason = $2 WHERE id = $1 AND status = 'visible'",
-        [id, reasonCode],
+        "UPDATE posts SET status = 'removed', removed_reason = $2, removed_by = $3 WHERE id = $1 AND status = 'visible'",
+        [id, reasonCode, req.session!.accountId],
       );
       if (!rowCount) return notFound(reply); // removed concurrently
       await logAction(pool, {

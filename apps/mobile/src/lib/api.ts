@@ -21,6 +21,8 @@ export interface Me {
   username: string;
   status: AccountStatus;
   scope: SessionScope;
+  /** Shows moderator tools; the server checks every action anyway. */
+  moderator?: boolean;
 }
 
 export interface IdentityForm {
@@ -469,6 +471,33 @@ export interface LeaderViewer {
   claimed: boolean;
 }
 
+export type NoteTarget = 'post' | 'comment' | 'bill' | 'citation';
+
+export interface ContextNote {
+  id: string;
+  body: string;
+  sourceUrl: string;
+  sourceName: string;
+  createdAt: string;
+}
+
+export interface PendingAppeal {
+  id: string;
+  targetType: 'post' | 'comment' | 'context_note';
+  targetId: string;
+  statement: string;
+  yourDecision: boolean;
+}
+
+export interface LogEntry {
+  id: number;
+  action: string;
+  target_username: string | null;
+  reason_code: string;
+  actor_role: string;
+  created_at: string;
+}
+
 export type FollowKind = 'community' | 'user' | 'leader' | 'place' | 'bill';
 
 export interface FollowedItem {
@@ -489,6 +518,62 @@ const billQuery = (f: BillFilter) => {
     if (v !== undefined && v !== false) params.set(k, String(v));
   const qs = params.toString();
   return qs ? `?${qs}` : '';
+};
+
+export const moderation = {
+  log: (before?: number) =>
+    request<{ entries: LogEntry[] }>(
+      'GET',
+      `/v1/moderation/log${before ? `?before=${before}` : ''}`,
+    ),
+  reasonCodes: () => request<Record<string, unknown>>('GET', '/v1/moderation/reason-codes'),
+  removePost: (token: string, id: string, reasonCode: string) =>
+    request<{ status: string }>('POST', `/v1/moderation/posts/${id}/remove`, {
+      token,
+      body: { reasonCode },
+    }),
+  removeComment: (token: string, id: string, reasonCode: string) =>
+    request<{ status: string }>('POST', `/v1/moderation/comments/${id}/remove`, {
+      token,
+      body: { reasonCode },
+    }),
+  addNote: (
+    token: string,
+    body: {
+      targetType: NoteTarget;
+      targetId: string;
+      body: string;
+      sourceUrl: string;
+      reasonCode: string;
+    },
+  ) => request<{ id: string }>('POST', '/v1/moderation/context-notes', { token, body }),
+  notes: (targetType: NoteTarget, targetId: string) =>
+    request<{ notes: ContextNote[] }>(
+      'GET',
+      `/v1/context-notes?targetType=${targetType}&targetId=${targetId}`,
+    ),
+  appeal: (
+    token: string,
+    targetType: 'post' | 'comment' | 'context_note',
+    targetId: string,
+    statement: string,
+  ) =>
+    request<{ id: string; status: string }>('POST', '/v1/appeals', {
+      token,
+      body: { targetType, targetId, statement },
+    }),
+  pendingAppeals: (token: string) =>
+    request<{ appeals: PendingAppeal[] }>('GET', '/v1/moderation/appeals', { token }),
+  decideAppeal: (token: string, id: string, decision: 'uphold' | 'deny', reasonCode: string) =>
+    request<{ status: string }>('POST', `/v1/moderation/appeals/${id}/decision`, {
+      token,
+      body: { decision, reasonCode },
+    }),
+  moderateRequest: (
+    token: string,
+    id: string,
+    body: { status: 'done' | 'removed' | 'merged'; reasonCode: string; mergeInto?: string },
+  ) => request<{ status: string }>('PATCH', `/v1/leader-requests/${id}`, { token, body }),
 };
 
 export const civic = {
@@ -683,6 +768,13 @@ export function describeError(err: unknown): string {
     cannot_follow_self: 'You can’t follow yourself.',
     not_found: 'That could not be found.',
     already_voted: 'You already voted on this.',
+    slow_mode: 'This thread is busy. To keep it readable, you can comment once every 2 minutes.',
+    already_appealed: 'You already appealed this.',
+    only_the_author_can_appeal: 'Only the author can appeal.',
+    nothing_to_appeal: 'There’s nothing to appeal here.',
+    awaiting_second_moderator: 'You proposed this; a second moderator must confirm it.',
+    reason_mismatch_with_proposal:
+      'Another moderator proposed a different reason. Discuss before confirming.',
     application_pending: 'You already have an application waiting for review in this topic.',
     already_contributor: 'You’re already a contributor in this topic.',
     claim_pending: 'A claim for this page is already being reviewed.',

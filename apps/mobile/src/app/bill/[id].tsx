@@ -15,6 +15,7 @@ import {
   TallyBar,
 } from '@/components/civic';
 import { Button, ErrorText } from '@/components/form';
+import { ContextNotes, ModeratorPanel } from '@/components/moderation-tools';
 import { Screen } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
 import { Brand, Radius, Spacing } from '@/constants/theme';
@@ -31,6 +32,7 @@ export default function BillScreen() {
   const [bill, setBill] = useState<Bill | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<'support' | 'oppose' | null>(null);
+  const [noteVersion, setNoteVersion] = useState(0);
   // Your own stance, remembered only on this device (the server never knows it).
   const [mine, setMine] = useState<Stance | null>(null);
 
@@ -83,6 +85,13 @@ export default function BillScreen() {
         </View>
         <ThemedText type="subtitle">{bill.title}</ThemedText>
         <ThemedText>{bill.summary}</ThemedText>
+        <ContextNotes targetType="bill" targetId={bill.id} version={noteVersion} />
+        <ModeratorPanel
+          targetType="bill"
+          targetId={bill.id}
+          canRemove={false}
+          onDone={() => setNoteVersion((v) => v + 1)}
+        />
         {bill.impact ? (
           <View style={[styles.impact, { backgroundColor: theme.backgroundElement }]}>
             <ThemedText type="caption" style={{ color: Brand.primary, fontWeight: 900 }}>

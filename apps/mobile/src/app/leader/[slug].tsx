@@ -25,6 +25,7 @@ import {
   type Leader,
   type LeaderRequest,
   type LeaderViewer,
+  moderation,
   type RequestStatus,
 } from '@/lib/api';
 import { isFullyOnboarded, useAuth } from '@/lib/auth';
@@ -255,6 +256,13 @@ function RequestsTab({ leader }: { leader: Leader }) {
             {isLeader && r.status !== 'done' ? (
               <LeaderControls request={r} onChange={load} />
             ) : null}
+            {me?.moderator && !isLeader ? (
+              <ModRequestControls
+                request={r}
+                others={requests.filter((x) => x.id !== r.id)}
+                onChange={load}
+              />
+            ) : null}
           </View>
         </View>
       ))}
@@ -347,6 +355,74 @@ function ClaimBanner({ leader }: { leader: Leader }) {
         Are you {leader.name}? Claim this page →
       </ThemedText>
     </Pressable>
+  );
+}
+
+/** Moderators: mark done when the action is documented, remove, or merge a duplicate. */
+function ModRequestControls({
+  request,
+  others,
+  onChange,
+}: {
+  request: LeaderRequest;
+  others: LeaderRequest[];
+  onChange: () => void;
+}) {
+  const { token } = useAuth();
+  const [merging, setMerging] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const act = async (body: Parameters<typeof moderation.moderateRequest>[2]) => {
+    try {
+      await moderation.moderateRequest(token!, request.id, body);
+      setMerging(false);
+      onChange();
+    } catch (err) {
+      setError(describeError(err));
+    }
+  };
+  return (
+    <View style={styles.controls}>
+      <View style={styles.controlRow}>
+        {request.status !== 'done' ? (
+          <Button
+            title="Done (documented)"
+            size="small"
+            variant="ghost"
+            onPress={() => act({ status: 'done', reasonCode: 'leader_action_documented' })}
+          />
+        ) : null}
+        {others.length ? (
+          <Button
+            title="Merge…"
+            size="small"
+            variant="ghost"
+            onPress={() => setMerging((m) => !m)}
+          />
+        ) : null}
+        <Button
+          title="Remove"
+          size="small"
+          variant="ghost"
+          onPress={() => act({ status: 'removed', reasonCode: 'not_a_request' })}
+        />
+      </View>
+      {merging
+        ? others
+            .slice(0, 8)
+            .map((o) => (
+              <Button
+                key={o.id}
+                title={`Merge into: ${o.title}`}
+                size="small"
+                variant="secondary"
+                onPress={() =>
+                  act({ status: 'merged', mergeInto: o.id, reasonCode: 'duplicate_request' })
+                }
+              />
+            ))
+        : null}
+      <ErrorText message={error} />
+    </View>
   );
 }
 

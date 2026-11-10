@@ -15,10 +15,12 @@ import { SoftAuthenticator } from './soft-authenticator.js';
 
 let h: Harness;
 let mod: string;
+let mod2: string;
 
 beforeAll(async () => {
   h = await createHarness();
   mod = await moderator(h, 'mod_alice');
+  mod2 = await moderator(h, 'mod_bob');
 });
 
 afterAll(async () => {
@@ -111,10 +113,27 @@ describe('verification review queue', () => {
         "SELECT account_id FROM verification_reviews r JOIN accounts a ON a.id = r.account_id WHERE a.username = 'denied_one'",
       )
     ).rows[0];
-    await post(`/v1/moderation/reviews/${account_id}/decision`, mod, {
+    const first = await post(`/v1/moderation/reviews/${account_id}/decision`, mod, {
       decision: 'deny',
       reasonCode: 'document_unreadable',
     });
+    expect(first.statusCode).toBe(202); // a denial needs a second moderator
+    expect(
+      (
+        await post(`/v1/moderation/reviews/${account_id}/decision`, mod, {
+          decision: 'deny',
+          reasonCode: 'document_unreadable',
+        })
+      ).json(),
+    ).toEqual({ error: 'awaiting_second_moderator' });
+    expect(
+      (
+        await post(`/v1/moderation/reviews/${account_id}/decision`, mod2, {
+          decision: 'deny',
+          reasonCode: 'document_unreadable',
+        })
+      ).json(),
+    ).toEqual({ status: 'denied' });
     const res = await post('/v1/me/verification', token, identity());
     expect(res.statusCode).toBe(403);
     expect(res.json()).toEqual({ error: 'verification_denied', reason: 'document_unreadable' });
@@ -127,7 +146,20 @@ describe('bans', () => {
     const { device } = await onboard(h, 'to_be_banned', person);
     const session = (await signIn(h, device)).json().token;
 
-    const ban = await post('/v1/moderation/accounts/to_be_banned/ban', mod, {
+    const proposal = await post('/v1/moderation/accounts/to_be_banned/ban', mod, {
+      reasonCode: 'account_sale',
+    });
+    expect(proposal.statusCode).toBe(202);
+    expect(proposal.json()).toEqual({ status: 'pending_second_moderator' });
+    // Not banned yet: one moderator alone can't ban.
+    expect(
+      (await h.app.inject({ method: 'GET', url: '/v1/me', headers: bearer(session) })).statusCode,
+    ).toBe(200);
+    // A second moderator must agree on the reason.
+    expect(
+      (await post('/v1/moderation/accounts/to_be_banned/ban', mod2, { reasonCode: 'spam' })).json(),
+    ).toEqual({ error: 'reason_mismatch_with_proposal', proposedReason: 'account_sale' });
+    const ban = await post('/v1/moderation/accounts/to_be_banned/ban', mod2, {
       reasonCode: 'account_sale',
     });
     expect(ban.json()).toEqual({ status: 'banned' });

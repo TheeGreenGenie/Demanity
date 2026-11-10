@@ -38,6 +38,7 @@ function RootStack() {
       <Stack.Screen name="bill/[id]" options={{ title: 'Bill' }} />
       <Stack.Screen name="guide/[slug]" options={{ title: '' }} />
       <Stack.Screen name="election/[id]" options={{ title: 'Election' }} />
+      <Stack.Screen name="log" options={{ title: 'Moderation log' }} />
       {/* Onboarding needs a session; writing needs a finished sign-up. */}
       <Stack.Protected guard={!ready || token !== null}>
         <Stack.Screen name="onboarding" options={{ title: '' }} />

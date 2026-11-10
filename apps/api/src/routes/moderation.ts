@@ -3,7 +3,12 @@ import type { Pool } from '@demanity/db';
 import { requireSession } from '../auth/guard.js';
 import { createSession, type Session } from '../auth/sessions.js';
 import { REASON_CODES } from '../moderation/reasons.js';
-import { isModerator, logAction } from '../moderation/service.js';
+import {
+  isModerator,
+  logAction,
+  secondModerator,
+  secondModeratorReply,
+} from '../moderation/service.js';
 import type { RouteLimits } from '../rate-limit.js';
 import { VaultClientError, type Vault } from '../vault-client.js';
 
@@ -126,6 +131,25 @@ export async function moderationRoutes(app: FastifyInstance, deps: ModerationDep
         return reply.code(400).send({ error: 'reason_does_not_match_decision' });
       }
       if (id === actor(req)) return reply.code(403).send({ error: 'cannot_decide_own_case' });
+      if (decision === 'deny') {
+        const { rowCount: pending } = await pool.query(
+          "SELECT 1 FROM verification_reviews WHERE account_id = $1 AND status = 'pending'",
+          [id],
+        );
+        if (!pending) return reply.code(404).send({ error: 'no_pending_review' });
+        // Denials need a second moderator (R10).
+        const second = await secondModerator(pool, 'verification_deny', id, reasonCode, actor(req));
+        const early = secondModeratorReply(second);
+        if (early) {
+          if (second.state === 'proposed')
+            await logAction(pool, {
+              action: 'verification.deny_proposed',
+              reasonCode,
+              actorAccountId: actor(req),
+            });
+          return reply.code(early.code).send(early.body);
+        }
+      }
       const { rowCount } = await pool.query(
         `UPDATE verification_reviews SET status = $2, reason_code = $3, decided_at = now()
           WHERE account_id = $1 AND status = 'pending'`,
@@ -173,6 +197,20 @@ export async function moderationRoutes(app: FastifyInstance, deps: ModerationDep
       if (target.id === actor(req))
         return reply.code(403).send({ error: 'cannot_decide_own_case' });
       if (target.status === 'banned') return reply.code(409).send({ error: 'already_banned' });
+
+      // Bans need a second, different moderator with the same reason (R10).
+      const second = await secondModerator(pool, 'ban', target.id, reasonCode, actor(req));
+      const early = secondModeratorReply(second);
+      if (early) {
+        if (second.state === 'proposed')
+          await logAction(pool, {
+            action: 'account.ban_proposed',
+            reasonCode,
+            actorAccountId: actor(req),
+            targetUsername: username,
+          });
+        return reply.code(early.code).send(early.body);
+      }
 
       // Ban the identity first (so the person cannot re-register), then the account.
       if (target.status === 'verified' || target.status === 'active') {
