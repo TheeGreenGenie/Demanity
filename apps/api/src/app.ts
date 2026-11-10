@@ -4,6 +4,7 @@ import Fastify, { type FastifyInstance, type FastifyServerOptions } from 'fastif
 import type { Redis } from 'ioredis';
 import type { Pool } from '@demanity/db';
 import { ROUTE_LIMITS, rateLimitKey, type RouteLimits } from './rate-limit.js';
+import { civicRoutes } from './routes/civic.js';
 import { moderationRoutes } from './routes/moderation.js';
 import { socialRoutes } from './routes/social.js';
 import { loadSession } from './auth/guard.js';
@@ -84,6 +85,9 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     );
     await app.register(async (scoped) =>
       socialRoutes(scoped, { pool, limits: rl.routeLimits ?? ROUTE_LIMITS }),
+    );
+    await app.register(async (scoped) =>
+      civicRoutes(scoped, { pool, limits: rl.routeLimits ?? ROUTE_LIMITS }),
     );
   }
 

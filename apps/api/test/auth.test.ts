@@ -31,6 +31,8 @@ const RELAXED = {
   signIn: relaxed,
   post: relaxed,
   comment: relaxed,
+  request: relaxed,
+  stance: relaxed,
 };
 
 let apiPool: Pool;

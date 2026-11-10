@@ -39,6 +39,16 @@ Each item page includes:
 - follow and alert controls
 - context notes
 
+## 3a. Support or oppose (swipe)
+Members can weigh in on bills from a card deck: swipe right to support, left to oppose, or use the buttons.
+- **One stance per member per bill, and it can't be changed.** No code path edits a stance.
+- **Private by design.** The database records only *that* a member weighed in (so the bill isn't shown again), not which way, and with no timestamp. The direction exists only as an anonymous running total for the bill. A database leak therefore can't reveal how any person feels about a bill.
+- **Results after you weigh in.** Totals are hidden until you've weighed in, to avoid bandwagon effects. They always show n and the self-selected-sample label.
+- This is an interim design until unlinkable ballots ([EXPERIMENTS.md](EXPERIMENTS.md), idea 1) replace it.
+
+## 3b. Leader requests
+Each leader page has a Requests tab where members post what they most want that leader to do and upvote others' requests, one vote per member. Requests are public posts, like forum posts. They are sorted by votes.
+
 ## 4. User contributions (moderator-approved)
 - **Missing items:** bills, orders or rulings the feeds missed. Each needs an approved source ([SOURCES.md](SOURCES.md)).
 - **Context and impact notes:** who an item affects and how, with sources.

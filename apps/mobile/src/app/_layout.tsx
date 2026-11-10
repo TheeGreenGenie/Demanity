@@ -33,6 +33,10 @@ function RootStack() {
       <Stack.Screen name="c/[slug]" options={bannerHeader} />
       <Stack.Screen name="post/[id]" options={{ title: 'Post' }} />
       <Stack.Screen name="u/[username]" options={bannerHeader} />
+      <Stack.Screen name="place/[slug]" options={bannerHeader} />
+      <Stack.Screen name="leader/[slug]" options={bannerHeader} />
+      <Stack.Screen name="bill/[id]" options={{ title: 'Bill' }} />
+      <Stack.Screen name="guide/[slug]" options={{ title: '' }} />
       {/* Onboarding needs a session; writing needs a finished sign-up. */}
       <Stack.Protected guard={!ready || token !== null}>
         <Stack.Screen name="onboarding" options={{ title: '' }} />

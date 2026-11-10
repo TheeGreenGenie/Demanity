@@ -107,9 +107,55 @@ async function listPosts(
   return { posts, next: rows.length > PAGE && last ? encodeCursor(last) : null, rows: page };
 }
 
+export type PostSort = 'new' | 'hot' | 'top';
+
+/**
+ * Published ranking formulas for the optional Hot and Top sorts (New stays
+ * the default; nothing is ranked behind the user's back):
+ * - top: net votes = likes - dislikes + kudos, ties broken by newest.
+ * - hot: (net votes + 1) / (age in hours + 2)^1.5, so newer posts with the
+ *   same votes rank higher (the "gravity" approach used by many forums).
+ */
+export const SORT_FORMULAS: Record<Exclude<PostSort, 'new'>, string> = {
+  top: '(x.likes - x.dislikes + x.kudos) DESC, x.created_at DESC, x.id DESC',
+  hot: `(x.likes - x.dislikes + x.kudos + 1) / power(extract(epoch FROM now() - x.created_at) / 3600 + 2, 1.5) DESC, x.created_at DESC, x.id DESC`,
+};
+
+/** Hot/Top pages use an offset cursor ("o:<n>"), since scores change over time. */
+async function rankedPosts(
+  pool: Pool,
+  viewerId: string | null,
+  where: string,
+  params: unknown[],
+  sort: Exclude<PostSort, 'new'>,
+  cursor: string | undefined,
+) {
+  const decoded = cursor ? Buffer.from(cursor, 'base64url').toString() : 'o:0';
+  const offset = /^o:(\d{1,5})$/.exec(decoded)?.[1];
+  const start = offset ? Number(offset) : 0;
+  const { rows } = await pool.query<PostRow>(
+    `SELECT * FROM (${POST_SELECT} WHERE ${where}) x ORDER BY ${SORT_FORMULAS[sort]}
+      LIMIT ${PAGE + 1} OFFSET ${start}`,
+    [viewerId, ...params],
+  );
+  const posts = rows.slice(0, PAGE).map(toView);
+  return {
+    posts,
+    next: rows.length > PAGE ? Buffer.from(`o:${start + PAGE}`).toString('base64url') : null,
+  };
+}
+
 export const queries = {
-  communityPosts: (pool: Pool, viewerId: string | null, communityId: string, cursor?: string) =>
-    listPosts(pool, viewerId, 'p.community_id = $2', [communityId], cursor),
+  communityPosts: (
+    pool: Pool,
+    viewerId: string | null,
+    communityId: string,
+    cursor?: string,
+    sort: PostSort = 'new',
+  ) =>
+    sort === 'new'
+      ? listPosts(pool, viewerId, 'p.community_id = $2', [communityId], cursor)
+      : rankedPosts(pool, viewerId, 'p.community_id = $2', [communityId], sort, cursor),
 
   userPosts: (pool: Pool, viewerId: string | null, authorId: string, cursor?: string) =>
     listPosts(pool, viewerId, 'p.author_id = $2', [authorId], cursor),

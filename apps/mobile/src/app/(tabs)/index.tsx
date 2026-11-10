@@ -27,7 +27,10 @@ function useCommunityPills(token: string | null) {
       .communities(token)
       .then((r) =>
         setCommunities(
-          [...r.communities].sort((a, b) => Number(b.following) - Number(a.following)).slice(0, 14),
+          r.communities
+            .filter((c) => c.kind !== 'humanity') // Humanity has its own tab
+            .sort((a, b) => Number(b.following) - Number(a.following))
+            .slice(0, 14),
         ),
       )
       .catch(() => undefined);

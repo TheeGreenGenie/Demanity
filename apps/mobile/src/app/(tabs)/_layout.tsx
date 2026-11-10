@@ -62,16 +62,25 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="communities"
+        name="search"
         options={{
-          title: 'Communities',
-          tabBarIcon: (p) => <StateIcon {...p} outline="compass-outline" filled="compass" />,
+          title: 'Search',
+          tabBarIcon: (p) => <StateIcon {...p} outline="search-outline" filled="search" />,
+        }}
+      />
+      <Tabs.Screen
+        name="bills"
+        options={{
+          title: 'Bills',
+          headerShown: false,
+          tabBarIcon: (p) => <StateIcon {...p} outline="albums-outline" filled="albums" />,
         }}
       />
       <Tabs.Screen
         name="humanity"
         options={{
           title: 'Humanity',
+          headerShown: false,
           tabBarIcon: (p) => <StateIcon {...p} outline="heart-outline" filled="heart" />,
         }}
       />

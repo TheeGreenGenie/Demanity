@@ -23,12 +23,34 @@ test('capture key screens', async ({ page }) => {
 
   await page.goto('/');
   await shot('01-guest-home');
-  await page.goto('/communities');
-  await shot('02-explore');
+  await page.goto('/search');
+  await shot('02-search');
   await page.goto('/humanity');
   await shot('03-humanity');
   await page.goto('/c/health');
   await shot('04-community');
+  await page.goto('/c/california?tab=overview');
+  await shot('10-place-overview');
+  await page.goto('/c/california?tab=scores');
+  await page
+    .getByRole('button', { name: /^Health:/ })
+    .filter({ visible: true })
+    .click();
+  await shot('11-place-scores');
+  await page.goto('/c/california?tab=living');
+  await shot('12-place-cost-of-living');
+  await page.goto('/place/austin-tx');
+  await shot('13-city');
+  await page.goto('/c/california?tab=leaders');
+  await page
+    .getByRole('link', { name: /Governor of California/ })
+    .filter({ visible: true })
+    .click();
+  await shot('14-leader');
+  await page.getByRole('tab', { name: 'Requests' }).filter({ visible: true }).click();
+  await shot('15-leader-requests');
+  await page.goto('/guide/how-a-bill-becomes-law');
+  await shot('16-guide');
 
   await addVirtualPasskeyDevice(page);
   await page.goto('/join');
@@ -37,7 +59,7 @@ test('capture key screens', async ({ page }) => {
   await shot('06-account');
 
   await page.goto('/c/health');
-  await page.getByRole('button', { name: 'Follow' }).filter({ visible: true }).click();
+  await page.getByRole('button', { name: 'Join' }).filter({ visible: true }).click();
   await page.goto('/');
   await shot('07-member-feed');
 
@@ -50,4 +72,8 @@ test('capture key screens', async ({ page }) => {
 
   await page.goto('/compose?community=health');
   await shot('09-compose');
+  await page.goto('/bills');
+  await shot('17-bills-swipe');
+  await page.getByRole('button', { name: 'Support' }).filter({ visible: true }).click();
+  await shot('18-bills-after-swipe');
 });

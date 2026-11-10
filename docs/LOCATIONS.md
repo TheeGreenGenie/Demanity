@@ -64,3 +64,28 @@ For each pending bill relevant to the place, in the bill's CRS policy area `c`:
 - Cities and court districts need aggregation from counties or tracts, and the method for that aggregation must be documented.
 
 **Before release:** finish the indicator-to-category mapping for all categories that have usable data, and get cross-partisan review of the mapping ([NONPARTISANSHIP.md](NONPARTISANSHIP.md)).
+
+## 5. Place scores, 0-100 in every category (proposal, REVIEW BEFORE RELEASE)
+Place pages show a score from 0 to 100 (higher is better) for each of the 32 policy areas, the same scale used for leaders.
+- **Category score** = `100 − problem score` from §4, so it is the place's average percentile among its peers with "better" oriented up.
+- **Peers.** A place is compared only with the same kind of place: cities with cities, counties with counties, states with states, court districts with court districts. Each category shows the place's rank among its peers and the peer average.
+- **Explanation.** Tapping a category opens why it got that score: the indicators used, each indicator's value, year and source, and the peer comparison.
+- **Overall score.** Same evidence-weighted mean as for leaders ([SCORING.md §4.1](SCORING.md#41-overall-score)), where the evidence count is the number of indicators behind each category. Categories with fewer than 3 indicators are left out of the overall.
+- **Not scored yet.** Categories without usable official indicators show "Not scored yet" rather than a guess.
+
+## 6. Cost and quality of life
+Place pages list everyday statistics next to the scores, each compared with the median of the same kind of place:
+
+| Statistic | Planned source |
+|---|---|
+| Cost of living (100 = U.S. average) | [BEA Regional Price Parities](https://www.bea.gov/data/prices-inflation/regional-price-parities-state-and-metro-area) (states and metro areas) |
+| Median household income, median rent, uninsured rate, average commute | Census ACS 5-year |
+| Groceries | BLS Consumer Price Index, food at home (regional and metro) |
+| Childcare | [DOL National Database of Childcare Prices](https://www.dol.gov/agencies/wb/topics/featured-childcare) (county level) |
+| Gasoline, average electric bill | EIA |
+| Unemployment rate | BLS Local Area Unemployment Statistics |
+
+**Limitations:** not every source covers every kind of place (for example, price parities exist for states and metro areas, not counties), and sources publish in different years. Each figure shows its own source and year.
+
+## 7. Development sample data
+Until ingestion exists, development databases contain made-up place statistics, scores and issues so the pages can be designed. Every such row is flagged as sample data, the app shows a "Sample data for design only" banner on it, and the production server refuses to start while any sample row exists.

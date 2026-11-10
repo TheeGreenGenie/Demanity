@@ -4,7 +4,7 @@ import { requireSession } from '../auth/guard.js';
 import { REASON_CODES } from '../moderation/reasons.js';
 import { isModerator, logAction } from '../moderation/service.js';
 import type { RouteLimits } from '../rate-limit.js';
-import { queries } from '../social/queries.js';
+import { queries, type PostSort } from '../social/queries.js';
 
 /**
  * Social core (R5, R8, R15, R16, R18). Guests can read everything; writing
@@ -76,9 +76,16 @@ export async function socialRoutes(
     async (req, reply) => {
       const c = await communityBySlug(pool, (req.params as { slug: string }).slug);
       if (!c) return notFound(reply);
-      const { rows } = await pool.query<{ followers: number; following: boolean }>(
+      const { rows } = await pool.query<{
+        followers: number;
+        following: boolean;
+        posts: number;
+        place: string | null;
+      }>(
         `SELECT (SELECT count(*)::int FROM follows WHERE target_type = 'community' AND target_id = $1) AS followers,
-              EXISTS (SELECT 1 FROM follows WHERE follower_id = $2 AND target_type = 'community' AND target_id = $1) AS following`,
+              EXISTS (SELECT 1 FROM follows WHERE follower_id = $2 AND target_type = 'community' AND target_id = $1) AS following,
+              (SELECT count(*)::int FROM posts WHERE community_id = $1 AND status = 'visible') AS posts,
+              (SELECT slug FROM places WHERE community_id = $1) AS place`,
         [c.id, viewer(req)],
       );
       return { slug: c.slug, name: c.name, kind: c.kind, description: c.description, ...rows[0] };
@@ -87,16 +94,23 @@ export async function socialRoutes(
 
   app.get(
     '/v1/communities/:slug/posts',
-    { schema: { params: { type: 'object', properties: { slug } }, querystring: cursorQuery } },
+    {
+      schema: {
+        params: { type: 'object', properties: { slug } },
+        querystring: {
+          ...cursorQuery,
+          properties: {
+            ...cursorQuery.properties,
+            sort: { type: 'string', enum: ['new', 'hot', 'top'] },
+          },
+        },
+      },
+    },
     async (req, reply) => {
       const c = await communityBySlug(pool, (req.params as { slug: string }).slug);
       if (!c) return notFound(reply);
-      const { posts, next } = await queries.communityPosts(
-        pool,
-        viewer(req),
-        c.id,
-        (req.query as { cursor?: string }).cursor,
-      );
+      const { cursor, sort } = req.query as { cursor?: string; sort?: PostSort };
+      const { posts, next } = await queries.communityPosts(pool, viewer(req), c.id, cursor, sort);
       return { posts, next };
     },
   );

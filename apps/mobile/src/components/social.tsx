@@ -308,7 +308,7 @@ export function FollowButton({
       ]}
     >
       <ThemedText type="smallBold" style={on ? undefined : { color: theme.background }}>
-        {on ? 'Following' : 'Follow'}
+        {kind === 'community' ? (on ? 'Joined' : 'Join') : on ? 'Following' : 'Follow'}
       </ThemedText>
     </Pressable>
   );

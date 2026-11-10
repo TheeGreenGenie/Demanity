@@ -26,11 +26,11 @@ test('members follow, post, see the post in their feed with a reason, and commen
   await addVirtualPasskeyDevice(page);
   await signUp(page, stack, 'e2e_social');
 
-  // Follow a community from its page
+  // Join a community from its page
   await page.goto('/c/health');
   await expect(visible(page, 'Health').first()).toBeVisible();
-  await button(page, 'Follow').click();
-  await expect(button(page, 'Following')).toBeVisible();
+  await button(page, 'Join').click();
+  await expect(button(page, 'Joined')).toBeVisible();
 
   // Write a post in it
   const title = `Free clinic opens downtown ${randomBytes(2).toString('hex')}`;

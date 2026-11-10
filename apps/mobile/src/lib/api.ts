@@ -60,7 +60,12 @@ export interface Community {
   description: string;
   followers: number;
   following: boolean;
+  /** Detail only: number of visible posts and the linked place page, if any. */
+  posts?: number;
+  place?: string | null;
 }
+
+export type PostSort = 'hot' | 'new' | 'top';
 
 export interface Post {
   id: string;
@@ -110,8 +115,17 @@ export const social = {
     }),
   community: (token: string | null, slug: string) =>
     request<Community>('GET', `/v1/communities/${slug}`, { token }),
-  communityPosts: (token: string | null, slug: string, cursor?: string | null) =>
-    request<Page<Post>>('GET', `/v1/communities/${slug}/posts${q(cursor)}`, { token }),
+  communityPosts: (
+    token: string | null,
+    slug: string,
+    cursor?: string | null,
+    sort: PostSort = 'new',
+  ) =>
+    request<Page<Post>>(
+      'GET',
+      `/v1/communities/${slug}/posts?sort=${sort}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`,
+      { token },
+    ),
   feed: (token: string, cursor?: string | null) =>
     request<Page<Post>>('GET', `/v1/feed${q(cursor)}`, { token }),
   post: (token: string | null, id: string) => request<Post>('GET', `/v1/posts/${id}`, { token }),
@@ -134,6 +148,202 @@ export const social = {
     request<void>('DELETE', `/v1/follows/${kind}/${name}`, { token }),
   user: (token: string | null, username: string) =>
     request<Profile>('GET', `/v1/users/${username}`, { token }),
+};
+
+// --- Civic: places, leaders, bills, guides, search -------------------------------
+
+export type PlaceKind =
+  'nation' | 'state' | 'county' | 'city' | 'court_district' | 'congressional_district';
+
+export interface Overall {
+  score: number | null;
+  categoriesCounted: number;
+  categoriesExcluded: number;
+  peers: { rank: number; count: number } | null;
+  method: string;
+}
+
+export interface CategoryScore {
+  category: { slug: string; name: string };
+  score: number | null;
+  rationale: string | null;
+  evidence: { label: string; url: string | null }[];
+  evidenceCount: number;
+  lowEvidence: boolean;
+  methodVersion: string | null;
+  asOf: string | null;
+  isSample: boolean;
+  peers: { rank: number; count: number; average: number } | null;
+}
+
+export interface Scores {
+  peerGroup: string;
+  overall: Overall;
+  categories: CategoryScore[];
+}
+
+export interface LeaderSummary {
+  slug: string;
+  name: string;
+  office: string;
+  party: string;
+  isSample: boolean;
+  overall: number | null;
+}
+
+export interface Bill {
+  id: string;
+  number: string;
+  title: string;
+  summary: string;
+  status: string;
+  introducedAt: string;
+  lastActionAt: string;
+  sourceUrl: string | null;
+  isSample: boolean;
+  place: { slug: string; name: string };
+  category: { slug: string; name: string } | null;
+  sponsors: { slug: string; name: string; party: string; role: string }[];
+  bipartisan: boolean;
+  weighedIn: boolean;
+  tally: { support: number; oppose: number } | null;
+}
+
+export interface Stat {
+  key: string;
+  label: string;
+  value: number;
+  unit: 'usd' | 'usd_month' | 'usd_year' | 'percent' | 'index' | 'minutes';
+  higherIsBetter: boolean;
+  sourceLabel: string;
+  sourceUrl: string | null;
+  asOf: string | null;
+  isSample: boolean;
+  peerMedian: number | null;
+  peerCount: number;
+}
+
+export interface Place {
+  slug: string;
+  name: string;
+  kind: PlaceKind;
+  isSample: boolean;
+  parent: { slug: string; name: string } | null;
+  community: string | null;
+  children: { slug: string; name: string; kind: PlaceKind }[];
+  overall: Overall;
+  issues: {
+    rank: number;
+    title: string;
+    summary: string;
+    sourceLabel: string;
+    sourceUrl: string | null;
+    isSample: boolean;
+    categorySlug: string | null;
+    categoryName: string | null;
+  }[];
+  elections: {
+    office: string;
+    kind: string;
+    electionDate: string;
+    sourceLabel: string;
+    sourceUrl: string | null;
+    isSample: boolean;
+  }[];
+  leaders: LeaderSummary[];
+  stats: Stat[];
+  recentBills: Bill[];
+}
+
+export interface Leader {
+  slug: string;
+  name: string;
+  office: string;
+  officeKind: string;
+  party: string;
+  inOffice: boolean;
+  bio: string;
+  isSample: boolean;
+  place: { slug: string; name: string } | null;
+  overall: Overall;
+  passed: Bill[];
+  sponsored: Bill[];
+}
+
+export interface LeaderRequest {
+  id: string;
+  title: string;
+  body: string;
+  createdAt: string;
+  author: { username: string } | null;
+  votes: number;
+  myVote: boolean;
+}
+
+export interface GuideSummary {
+  slug: string;
+  topic: string;
+  title: string;
+  summary: string;
+  readingMinutes: number;
+}
+
+export interface Guide extends GuideSummary {
+  body: string;
+  sources: { label: string; url: string }[];
+  updatedAt: string;
+}
+
+export interface SearchResults {
+  communities: { slug: string; name: string; kind: CommunityKind }[];
+  places: { slug: string; name: string; kind: PlaceKind }[];
+  leaders: { slug: string; name: string; office: string; party: string }[];
+  bills: Bill[];
+  posts: { id: string; title: string; communitySlug: string; communityName: string }[];
+}
+
+export const civic = {
+  place: (token: string | null, slug: string) =>
+    request<Place>('GET', `/v1/places/${slug}`, { token }),
+  placeScores: (token: string | null, slug: string) =>
+    request<Scores>('GET', `/v1/places/${slug}/scores`, { token }),
+  leader: (token: string | null, slug: string) =>
+    request<Leader>('GET', `/v1/leaders/${slug}`, { token }),
+  leaderScores: (token: string | null, slug: string) =>
+    request<Scores>('GET', `/v1/leaders/${slug}/scores`, { token }),
+  requests: (token: string | null, slug: string) =>
+    request<{ requests: LeaderRequest[] }>('GET', `/v1/leaders/${slug}/requests`, { token }),
+  createRequest: (token: string, slug: string, title: string, body: string) =>
+    request<{ id: string }>('POST', `/v1/leaders/${slug}/requests`, {
+      token,
+      body: body ? { title, body } : { title },
+    }),
+  voteRequest: (token: string, id: string) =>
+    request<void>('PUT', `/v1/leader-requests/${id}/vote`, { token }),
+  unvoteRequest: (token: string, id: string) =>
+    request<void>('DELETE', `/v1/leader-requests/${id}/vote`, { token }),
+  bills: (
+    token: string | null,
+    filter: { place?: string; category?: string; bipartisan?: boolean } = {},
+  ) => {
+    const params = new URLSearchParams();
+    if (filter.place) params.set('place', filter.place);
+    if (filter.category) params.set('category', filter.category);
+    if (filter.bipartisan) params.set('bipartisan', 'true');
+    const qs = params.toString();
+    return request<{ bills: Bill[] }>('GET', `/v1/bills${qs ? `?${qs}` : ''}`, { token });
+  },
+  deck: (token: string) => request<{ bills: Bill[] }>('GET', '/v1/bills/deck', { token }),
+  bill: (token: string | null, id: string) => request<Bill>('GET', `/v1/bills/${id}`, { token }),
+  stance: (token: string, id: string, stance: 'support' | 'oppose') =>
+    request<{ tally: { support: number; oppose: number } }>('POST', `/v1/bills/${id}/stance`, {
+      token,
+      body: { stance },
+    }),
+  guides: () => request<{ guides: GuideSummary[] }>('GET', '/v1/guides'),
+  guide: (slug: string) => request<Guide>('GET', `/v1/guides/${slug}`),
+  search: (token: string | null, q: string) =>
+    request<SearchResults>('GET', `/v1/search?q=${encodeURIComponent(q)}`, { token }),
 };
 
 export const api = {
@@ -192,6 +402,8 @@ export function describeError(err: unknown): string {
     post_removed: 'This post was removed by moderators.',
     cannot_follow_self: 'You can’t follow yourself.',
     not_found: 'That could not be found.',
+    already_weighed_in: 'You already weighed in on this bill. Stances can�t be changed.',
+    leader_not_in_office: 'This leader is no longer in office.',
   };
   if (err.status === 429) return 'Too many attempts. Please wait a little and try again.';
   return messages[err.code] ?? 'Something went wrong. Please try again.';
