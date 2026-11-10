@@ -4,17 +4,19 @@ import type { Pool } from '@demanity/db';
  * Outbound API budget (docs/adr/0008-outbound-api-budgets.md).
  *
  * Before every request to a data provider we:
- *  1. reserve one request from a per-source hourly budget stored in Postgres
- *     (atomic; shared across processes and restarts), and
+ *  1. reserve one request in every configured window (minute, hour, day),
+ *     atomically in Postgres, shared across processes and restarts; if any
+ *     window is full nothing is counted and BudgetExhausted is thrown;
  *  2. wait so consecutive requests are at least `minIntervalMs` apart.
- * When the hour's budget is spent, `take()` throws BudgetExhausted and the
- * sync stops cleanly, resuming next run. A provider "429 Too Many Requests"
- * stops the run too (no retry loop that could hammer the provider).
+ * A provider "429 Too Many Requests" stops the run too (no retry loop).
  */
 
 export class BudgetExhausted extends Error {
-  constructor(readonly source: string) {
-    super(`${source}: hourly request budget used up; will resume next run`);
+  constructor(
+    readonly source: string,
+    readonly window: Window = 'hour',
+  ) {
+    super(`${source}: ${window}ly request budget used up; will resume next run`);
   }
 }
 
@@ -24,9 +26,12 @@ export class ProviderRateLimited extends Error {
   }
 }
 
+export type Window = 'minute' | 'hour' | 'day';
+
 export interface BudgetOptions {
-  /** Max requests we allow ourselves per clock hour (keep well below the provider's limit). */
-  perHour: number;
+  perMinute?: number;
+  perHour?: number;
+  perDay?: number;
   /** Minimum gap between consecutive requests from this process. */
   minIntervalMs: number;
 }
@@ -43,37 +48,82 @@ export class ApiBudget {
     private readonly now: () => number = Date.now,
   ) {}
 
+  private windows(): Array<[Window, number]> {
+    const w: Array<[Window, number]> = [];
+    if (this.opts.perMinute) w.push(['minute', this.opts.perMinute]);
+    if (this.opts.perHour) w.push(['hour', this.opts.perHour]);
+    if (this.opts.perDay) w.push(['day', this.opts.perDay]);
+    return w;
+  }
+
   async take(): Promise<void> {
-    const { rows } = await this.pool.query<{ requests: number }>(
-      `INSERT INTO api_usage (source, window_start, requests)
-       VALUES ($1, date_trunc('hour', now()), 1)
-       ON CONFLICT (source, window_start) DO UPDATE SET requests = api_usage.requests + 1
-         WHERE api_usage.requests < $2
-       RETURNING requests`,
-      [this.source, this.opts.perHour],
-    );
-    if (rows.length === 0) throw new BudgetExhausted(this.source);
+    // Wait first, then reserve, so the reservation lands in the window the
+    // request is actually sent in.
     const wait = this.lastAt + this.opts.minIntervalMs - this.now();
     if (wait > 0) await this.sleep(wait);
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      for (const [kind, limit] of this.windows()) {
+        const { rows } = await client.query(
+          `INSERT INTO api_usage (source, window_kind, window_start, requests)
+           VALUES ($1, $2, date_trunc($2, now()), 1)
+           ON CONFLICT (source, window_kind, window_start)
+             DO UPDATE SET requests = api_usage.requests + 1 WHERE api_usage.requests < $3
+           RETURNING requests`,
+          [this.source, kind, limit],
+        );
+        if (rows.length === 0) {
+          await client.query('ROLLBACK');
+          throw new BudgetExhausted(this.source, kind);
+        }
+      }
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw err;
+    } finally {
+      client.release();
+    }
     this.lastAt = this.now();
   }
 
-  /** Requests used in the current hour (for logs and the freshness endpoint). */
-  async usedThisHour(): Promise<number> {
+  /** Requests used in the current window (for logs). */
+  async used(kind: Window = 'hour'): Promise<number> {
     const { rows } = await this.pool.query<{ requests: number }>(
-      "SELECT requests FROM api_usage WHERE source = $1 AND window_start = date_trunc('hour', now())",
-      [this.source],
+      'SELECT requests FROM api_usage WHERE source = $1 AND window_kind = $2 AND window_start = date_trunc($2, now())',
+      [this.source, kind],
     );
     return rows[0]?.requests ?? 0;
+  }
+
+  /** @deprecated use used('hour') */
+  usedThisHour(): Promise<number> {
+    return this.used('hour');
   }
 }
 
 /**
- * Defaults. Congress.gov documents 5,000 requests/hour per key
- * (github.com/LibraryOfCongress/api.congress.gov README, checked 2026-11-10);
- * we allow ourselves 10% of that and at most one request per second.
+ * Budgets, each about half (or less) of the provider's published limit.
+ * Sources, all checked 2026-11-10:
+ * - Congress.gov: 5,000 requests/hour per key (LibraryOfCongress/api.congress.gov README).
+ * - Open States v3 default tier: 10/minute, 250/day (openstates/api-v3, api/auth.py
+ *   `Tier("default", 10, 0, 250)` with fields per_minute, per_hour, per_day in api/rate_limiter.py).
+ * - CourtListener v4: 5/minute, 50/hour, 125/day, all enforced at once
+ *   (wiki.free.law/c/courtlistener/help/api/rest/v4/overview).
  */
 export const CONGRESS_BUDGET: BudgetOptions = { perHour: 500, minIntervalMs: 1000 };
+export const OPENSTATES_BUDGET: BudgetOptions = {
+  perMinute: 5,
+  perDay: 120,
+  minIntervalMs: 12_000,
+};
+export const COURTLISTENER_BUDGET: BudgetOptions = {
+  perMinute: 2,
+  perHour: 25,
+  perDay: 60,
+  minIntervalMs: 30_000,
+};
 
 /**
  * How much to ingest per run. Outside production we only want a sample of
@@ -88,6 +138,10 @@ export function ingestCaps(nodeEnv: string | undefined, env: NodeJS.ProcessEnv =
   return {
     maxBillsPerRun: num('INGEST_MAX_BILLS_PER_RUN', prod ? 500 : 25),
     lookbackDays: num('INGEST_LOOKBACK_DAYS', prod ? 7 : 3),
-    congressPerHour: Math.min(num('CONGRESS_REQUESTS_PER_HOUR', CONGRESS_BUDGET.perHour), 2500),
+    congressPerHour: Math.min(num('CONGRESS_REQUESTS_PER_HOUR', CONGRESS_BUDGET.perHour!), 2500),
+    /** Open States: pages of 20 bills per state per run (1 request each). */
+    statePagesPerRun: prod ? 3 : 1,
+    /** CourtListener: rulings kept per court per run (1 search request per court). */
+    rulingsPerCourt: prod ? 20 : 5,
   };
 }

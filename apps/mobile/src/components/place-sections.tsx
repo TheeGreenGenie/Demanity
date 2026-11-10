@@ -1,7 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Linking, Pressable, StyleSheet, View } from 'react-native';
 
 import {
   BillCard,
@@ -201,6 +201,39 @@ function OverviewTab({ place }: { place: Place }) {
           <GuideLink slug="contact-your-officials" label="Contact your officials" />
         </View>
       </Section>
+
+      {place.rulings ? (
+        <Section
+          title="Latest published opinions"
+          caption="From CourtListener, newest first. Its coverage of district courts is limited, so check each date."
+        >
+          {place.rulings.length === 0 ? (
+            <Empty text="No opinions synced yet." />
+          ) : (
+            place.rulings.map((r) => (
+              <Pressable
+                key={r.url}
+                accessibilityRole="link"
+                onPress={() => Linking.openURL(r.url)}
+                style={({ pressed }) => [
+                  styles.election,
+                  { borderBottomColor: theme.backgroundSelected },
+                  pressed && { opacity: 0.75 },
+                ]}
+              >
+                <Ionicons name="document-text-outline" size={20} color={Brand.primary} />
+                <View style={styles.flex}>
+                  <ThemedText type="smallBold">{r.caseName}</ThemedText>
+                  <ThemedText type="caption" themeColor="textSecondary">
+                    Filed {r.dateFiled}
+                    {r.docketNumber ? ` · ${r.docketNumber}` : ''}
+                  </ThemedText>
+                </View>
+              </Pressable>
+            ))
+          )}
+        </Section>
+      ) : null}
 
       <Section title="Current leaders" caption="Trust score, 0-100">
         {place.leaders.length === 0 ? (

@@ -83,11 +83,30 @@ export default function BillsScreen() {
     civic
       .freshness()
       .then((r) => {
+        const fmt = (iso: string) =>
+          new Date(iso).toLocaleString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            hour: 'numeric',
+            minute: '2-digit',
+          });
+        const parts: string[] = [];
         const c = r.sources.find((s) => s.source === 'congress.gov');
         if (c?.syncedThrough)
-          setFreshness(
-            `Federal bills from Congress.gov, synced through ${new Date(c.syncedThrough).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}${c.healthy ? '' : ' (last sync failed)'}`,
+          parts.push(
+            `federal (Congress.gov) through ${fmt(c.syncedThrough)}${c.healthy ? '' : ', last sync failed'}`,
           );
+        const states = r.sources.filter(
+          (s) => s.source.startsWith('openstates:') && s.lastSuccessAt,
+        );
+        if (states.length) {
+          const latest = states
+            .map((s) => s.lastSuccessAt!)
+            .sort()
+            .at(-1)!;
+          parts.push(`state (Open States) checked ${fmt(latest)}`);
+        }
+        if (parts.length) setFreshness(`Real bills synced: ${parts.join('; ')}.`);
       })
       .catch(() => undefined);
   }, []);

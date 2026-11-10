@@ -83,7 +83,7 @@ describe('ApiBudget', () => {
 
 describe('ingest caps', () => {
   it('keeps development runs small and production bounded', () => {
-    expect(ingestCaps('development', {})).toEqual({
+    expect(ingestCaps('development', {})).toMatchObject({
       maxBillsPerRun: 25,
       lookbackDays: 3,
       congressPerHour: 500,

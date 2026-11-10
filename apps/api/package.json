@@ -16,7 +16,9 @@
     "moderator:revoke": "node --env-file=../../.env scripts/grant-moderator.mjs revoke",
     "seed:dev-moderators": "tsx dev/run-seed-moderators.ts",
     "sample-data:clear": "tsx dev/run-clear-sample-data.ts",
-    "ingest:congress": "tsx src/ingest/run-congress.ts"
+    "ingest:congress": "tsx src/ingest/run.ts --source congress",
+    "ingest:states": "tsx src/ingest/run.ts --source states",
+    "ingest:courts": "tsx src/ingest/run.ts --source courts"
   },
   "dependencies": {
     "@demanity/db": "workspace:*",

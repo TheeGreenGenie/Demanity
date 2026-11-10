@@ -253,6 +253,8 @@ export interface Place {
   name: string;
   kind: PlaceKind;
   population: number | null;
+  /** Court-district pages only: latest published opinions (CourtListener). */
+  rulings: { caseName: string; docketNumber: string; dateFiled: string; url: string }[] | null;
   peerGroup: string;
   peerLabel: string;
   cost: {

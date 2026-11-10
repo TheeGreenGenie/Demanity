@@ -129,10 +129,13 @@ export const externalId = (congress: number, type: string, number: string) =>
 export function statusFromAction(text: string): string {
   const t = text.toLowerCase();
   const rules: Array<[RegExp, string]> = [
-    [/became (public|private) law|signed by (the )?president/, 'signed'],
+    [
+      /became (public|private) law|signed by (the )?(president|governor)|approved by (the )?governor|chaptered/,
+      'signed',
+    ],
     [/vetoed|veto message/, 'vetoed'],
     [/failed of passage|failed to pass|not agreed to/, 'failed'],
-    [/presented to (the )?president|cleared for (the )?white house/, 'passed'],
+    [/presented to (the )?(president|governor)|cleared for (the )?white house|enrolled/, 'passed'],
     [
       /passed (the )?(house|senate)|passed\/agreed to in|agreed to in (the )?(house|senate)/,
       'passed_chamber',

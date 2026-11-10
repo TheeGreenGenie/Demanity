@@ -29,7 +29,16 @@ Going over a provider's limit can get a key throttled or suspended, and on paid 
    - **SMS:** 5 per hour and 20 per day by default, for the Twilio trial.
    - Over a cap, the person sees "too many codes, try again later" (HTTP 429). Nothing is sent and nothing is counted.
    - The development console sender is not capped, because it sends nothing.
-4. **Not-yet-integrated providers.** Open States and CourtListener get a budget only once their published limits have been checked against their own documentation. Until then, no code calls them.
+4. **Open States and CourtListener.** Budgeted after checking each provider's own published limits on 2026-11-10. Budgets now have minute, hour and day windows, and all of them are enforced together.
+
+   | Provider | Published limit | Our budget | Source |
+   |---|---|---|---|
+   | Open States v3 (default key tier) | 10/minute, 250/day | 5/minute, 120/day, 1 request every 12 s | `openstates/api-v3`: `api/auth.py` defines `Tier("default", 10, 0, 250)`; the fields are per_minute, per_hour, per_day (`api/rate_limiter.py`) |
+   | CourtListener v4 | 5/minute, 50/hour, 125/day | 2/minute, 25/hour, 60/day, 1 request every 30 s | wiki.free.law/c/courtlistener/help/api/rest/v4/overview |
+
+   - **Schedule:** both sync every 6 hours. A development run is one page of 20 bills per state (5 requests) and 5 opinions per court (5 requests).
+   - **Maintenance window:** CourtListener's weekly maintenance is Thursdays 21:00–23:59 Pacific, and we never call during it.
+   - **Order of operations:** the spacing wait happens *before* the budget is reserved, so a reservation lands in the minute the request is actually sent. An earlier version reserved first; it never exceeded a limit, but it refused requests early.
 
 ## Consequences
 - Our keys stay well inside provider limits, even under abuse or misconfiguration.

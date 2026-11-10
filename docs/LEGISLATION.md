@@ -48,7 +48,26 @@ Demanity is a **government accountability** app. It tracks every new government 
   - anything else, such as "Held at the desk" → introduced.
 
   This is a heuristic. Pulling the full action history to determine status is a planned improvement.
-- **Not yet:** roll-call votes, cosponsors, summaries (Congress.gov publishes CRS summaries separately), state bills (Open States), executive orders and rulings.
+- **Not yet:** roll-call votes, cosponsors, summaries (Congress.gov publishes CRS summaries separately) and executive orders.
+
+### State bills (Open States), implemented
+- **Source:** Open States API v3, `GET /bills` with the key in the `X-API-KEY` header, `include=sponsorships&include=abstracts`, `sort=updated_asc`, `updated_since`, and at most 20 results per page. These details were checked in Open States' docs and open-source server.
+- **Coverage:** the 5 MVP states. Each state has its own cursor (`openstates:<state>`), and runs are idempotent upserts keyed by the Open States bill ID.
+- **What is stored:**
+  - the identifier and session (e.g. "AB 12 (20252026)");
+  - the title;
+  - the first abstract, as the summary;
+  - a status inferred from the latest action, using the same rules as federal bills plus state wording ("Chaptered", "Signed/Approved by the Governor", "Presented to the Governor", "Enrolled");
+  - the Open States page URL;
+  - up to 3 sponsors, as state-legislator leader records.
+- **Category:** none for now. State subject tags don't map one-to-one to the CRS policy areas, and we don't guess.
+- **Command:** `pnpm --filter @demanity/api ingest:states`.
+
+### Court opinions (CourtListener), implemented with a coverage caveat
+- **Source:** CourtListener REST v4 search, `type=o`, `q=court_id:<id>`, `order_by=dateFiled desc` (a value from CourtListener's own `OPINION_ORDER_BY_CHOICES`). The `Authorization: Token …` header is used.
+- **Courts:** the 5 federal district courts that have MVP court-district pages: `cacd`, `txsd`, `flsd`, `nyed` and `paed`.
+- **Coverage caveat (live check, 2026-11-10):** the newest published opinion CourtListener has for each of these courts is from mid-2019. Court-district pages therefore show the *latest available* opinions with their dates, under a coverage note, and never call them "recent". Recent district-court activity would need CourtListener's RECAP docket data, which is a separate, later integration.
+- **Command:** `pnpm --filter @demanity/api ingest:courts`.
 - **Freshness:** `GET /v1/data-freshness` reports, for each source, the moment it is synced through, the last success time, and whether the last run failed.
 
 ## 3. Item pages

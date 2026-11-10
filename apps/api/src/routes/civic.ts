@@ -4,6 +4,7 @@ import { requireSession } from '../auth/guard.js';
 import { ResponseCache } from '../cache.js';
 import { GALLONS_PER_MONTH, peerLabel } from '../civic/rollups.js';
 import { categoryScores, overall, overallScores } from '../civic/scores.js';
+import { COURT_IDS } from '../ingest/courtlistener.js';
 import { REASON_CODES } from '../moderation/reasons.js';
 import { isModerator, logAction } from '../moderation/service.js';
 import type { RouteLimits } from '../rate-limit.js';
@@ -348,7 +349,19 @@ export async function civicRoutes(
         leadersAt(place.id),
       ]);
       const c = cost.rows[0];
+      // Court-district pages: recent opinions from that federal district court.
+      const courtId = COURT_IDS[place.slug];
+      const rulings = courtId
+        ? (
+            await pool.query<{ date_filed: Date }>(
+              `SELECT case_name AS "caseName", docket_number AS "docketNumber", date_filed, url
+                 FROM court_rulings WHERE court_id = $1 ORDER BY date_filed DESC LIMIT 10`,
+              [courtId],
+            )
+          ).rows.map(({ date_filed, ...r }) => ({ ...r, dateFiled: day(date_filed) }))
+        : null;
       return {
+        rulings,
         slug: place.slug,
         name: place.name,
         kind: place.kind,

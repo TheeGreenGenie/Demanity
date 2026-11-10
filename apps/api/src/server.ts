@@ -7,7 +7,15 @@ import { RedisChallengeStore } from './auth/challenges.js';
 import { loadConfig, loadServiceConfig } from './config.js';
 import { assertNoDevSeedData } from './dev-seed-guard.js';
 import { recomputeRollups } from './civic/rollups.js';
-import { ApiBudget, CONGRESS_BUDGET, ingestCaps } from './ingest/budget.js';
+import {
+  ApiBudget,
+  CONGRESS_BUDGET,
+  COURTLISTENER_BUDGET,
+  ingestCaps,
+  OPENSTATES_BUDGET,
+} from './ingest/budget.js';
+import { CourtListenerClient, syncRulings } from './ingest/courtlistener.js';
+import { OpenStatesClient, syncStateBills } from './ingest/openstates.js';
 import { CongressClient, syncCongressBills } from './ingest/congress.js';
 import { deleteStalePendingAccounts } from './moderation/service.js';
 import { HttpVaultClient } from './vault-client.js';
@@ -100,6 +108,62 @@ if (svc.dataGovApiKey) {
     60 * 60 * 1000,
   );
   ingest.unref();
+}
+
+// Every 6 hours: state bills (Open States) and court rulings (CourtListener).
+// Their published daily limits are small (250 and 125), so runs are rare and
+// each one is budgeted well under them (ADR 0008).
+{
+  const caps = ingestCaps(config.nodeEnv);
+  const jobs: Array<() => Promise<unknown>> = [];
+  if (svc.openStatesApiKey) {
+    const states = new OpenStatesClient(
+      svc.openStatesApiKey,
+      fetch,
+      new ApiBudget(pool, 'openstates', OPENSTATES_BUDGET),
+    );
+    jobs.push(() =>
+      syncStateBills(pool, states, {
+        pagesPerState: caps.statePagesPerRun,
+        defaultLookbackDays: caps.lookbackDays,
+      }).then((r) =>
+        app.log.info({ bills: r.bills, stoppedEarly: r.stoppedEarly }, 'open states sync complete'),
+      ),
+    );
+  }
+  if (svc.courtListenerToken) {
+    const courts = new CourtListenerClient(
+      svc.courtListenerToken,
+      fetch,
+      new ApiBudget(pool, 'courtlistener', COURTLISTENER_BUDGET),
+    );
+    jobs.push(() =>
+      syncRulings(pool, courts, { perCourt: caps.rulingsPerCourt }).then((r) =>
+        app.log.info(
+          { rulings: r.rulings, stoppedEarly: r.stoppedEarly },
+          'courtlistener sync complete',
+        ),
+      ),
+    );
+  }
+  if (jobs.length) {
+    let running = false;
+    const slow = setInterval(
+      () => {
+        if (running) return;
+        running = true;
+        (async () => {
+          for (const job of jobs) await job();
+        })()
+          .catch((err: Error) => app.log.error({ err: { name: err.name } }, 'data sync failed'))
+          .finally(() => {
+            running = false;
+          });
+      },
+      6 * 60 * 60 * 1000,
+    );
+    slow.unref();
+  }
 }
 
 try {

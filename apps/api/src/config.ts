@@ -36,6 +36,10 @@ export interface ServiceConfig {
   rp: { id: string; name: string; origins: string[] };
   /** Optional: enables the hourly Congress.gov sync (api.data.gov key). */
   dataGovApiKey: string | null;
+  /** Optional: Open States state-bill sync. */
+  openStatesApiKey: string | null;
+  /** Optional: CourtListener rulings sync. */
+  courtListenerToken: string | null;
 }
 
 function required(env: NodeJS.ProcessEnv, name: string): string {
@@ -64,5 +68,7 @@ export function loadServiceConfig(env: NodeJS.ProcessEnv = process.env): Service
     rateLimitSecret: secret,
     rp: { id: required(env, 'WEBAUTHN_RP_ID'), name: 'Demanity', origins },
     dataGovApiKey: env.DATA_GOV_API_KEY || null,
+    openStatesApiKey: env.OPENSTATES_API_KEY || null,
+    courtListenerToken: env.COURTLISTENER_API_TOKEN || null,
   };
 }
