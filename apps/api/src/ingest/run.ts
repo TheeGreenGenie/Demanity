@@ -22,6 +22,7 @@ import {
 import { CongressClient, syncCongressBills } from './congress.js';
 import { CourtListenerClient, syncRulings } from './courtlistener.js';
 import { FederalRegisterClient, syncExecutiveOrders } from './federalregister.js';
+import { syncMembers } from './members.js';
 import { OpenStatesClient, syncStateBills } from './openstates.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -89,13 +90,23 @@ try {
     console.log(`CourtListener: ${r.dockets} case filings, ${r.rulings} opinions.`);
     if (r.stoppedEarly) console.log(`Stopped early: ${r.stoppedEarly}`);
     console.log(`Requests today: ${await budget.used('day')} of ${COURTLISTENER_BUDGET.perDay}.`);
+  } else if (values.source === 'members') {
+    const budget = new ApiBudget(pool, 'congress.gov', {
+      ...CONGRESS_BUDGET,
+      perHour: caps.congressPerHour,
+    });
+    const r = await syncMembers(pool, need('DATA_GOV_API_KEY'), fetch, budget);
+    console.log(
+      `Congress.gov members: ${r.current} sitting members from MVP states; ${r.leftOffice} left office.`,
+    );
+    if (r.stoppedEarly) console.log(`Stopped early: ${r.stoppedEarly}`);
   } else if (values.source === 'orders') {
     const budget = new ApiBudget(pool, 'federalregister', FEDERALREGISTER_BUDGET);
     const r = await syncExecutiveOrders(pool, new FederalRegisterClient(fetch, budget));
     console.log(`Federal Register: ${r.orders} executive orders.`);
     if (r.stoppedEarly) console.log(`Stopped early: ${r.stoppedEarly}`);
   } else {
-    console.error('Use --source congress | states | courts | orders');
+    console.error('Use --source congress | members | states | courts | orders');
     process.exit(2);
   }
   await recomputeRollups(pool);

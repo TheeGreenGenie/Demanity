@@ -91,12 +91,15 @@ async function recomputeTrust(client: PoolClient, now: Date): Promise<void> {
     weight: string;
     claim: string;
     source_url: string;
+    left_office_at: Date | null;
   }>(
     `SELECT c.id, c.leader_id, c.category_id, cat.name AS category_name, c.direction, c.action_date,
-            c.trust_at_add, c.accurate_yes, c.accurate_no, s.weight, c.claim, c.source_url
+            c.trust_at_add, c.accurate_yes, c.accurate_no, s.weight, c.claim, c.source_url,
+            l.left_office_at
        FROM citations c
        JOIN approved_sources s ON s.domain = c.source_domain
        JOIN communities cat ON cat.id = c.category_id
+       JOIN leaders l ON l.id = c.leader_id
       WHERE c.status = 'accepted'`,
   );
   const groups = new Map<string, typeof rows>();
@@ -126,7 +129,8 @@ async function recomputeTrust(client: PoolClient, now: Date): Promise<void> {
       accurateNo: r.accurate_no,
       sourceWeight: Number(r.weight),
     }));
-    const result = trustScore(input, now);
+    // Leaders who left office keep the score they had when they left (R17).
+    const result = trustScore(input, first.left_office_at ?? now);
     const byId = new Map(list.map((r) => [r.id, r]));
     const evidence = [...result.contributions]
       .sort((a, b) => Math.abs(b.x) - Math.abs(a.x))

@@ -17,6 +17,7 @@ import {
 } from './ingest/budget.js';
 import { CourtListenerClient, syncRulings } from './ingest/courtlistener.js';
 import { FederalRegisterClient, syncExecutiveOrders } from './ingest/federalregister.js';
+import { syncMembers } from './ingest/members.js';
 import { OpenStatesClient, syncStateBills } from './ingest/openstates.js';
 import { CongressClient, syncCongressBills } from './ingest/congress.js';
 import { deleteStalePendingAccounts } from './moderation/service.js';
@@ -144,6 +145,22 @@ if (svc.dataGovApiKey) {
         app.log.info(
           { rulings: r.rulings, dockets: r.dockets, stoppedEarly: r.stoppedEarly },
           'courtlistener sync complete',
+        ),
+      ),
+    );
+  }
+  // Sitting members of Congress (3 requests): lifecycle and photos stay current.
+  if (svc.dataGovApiKey) {
+    const key = svc.dataGovApiKey;
+    const memberBudget = new ApiBudget(pool, 'congress.gov', {
+      ...CONGRESS_BUDGET,
+      perHour: caps.congressPerHour,
+    });
+    jobs.push(() =>
+      syncMembers(pool, key, fetch, memberBudget).then((r) =>
+        app.log.info(
+          { current: r.current, leftOffice: r.leftOffice },
+          'congress members sync complete',
         ),
       ),
     );

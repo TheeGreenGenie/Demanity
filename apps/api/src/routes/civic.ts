@@ -233,9 +233,13 @@ export async function civicRoutes(
       account_id: string | null;
       place_slug: string | null;
       place_name: string | null;
+      photo_url: string | null;
+      photo_credit: string | null;
+      left_office_at: Date | null;
     }>(
       `SELECT l.id, l.slug, l.name, l.office, l.office_kind, l.party, l.in_office, l.bio, l.is_sample,
-              l.account_id, p.slug AS place_slug, p.name AS place_name
+              l.account_id, p.slug AS place_slug, p.name AS place_name, l.photo_url, l.photo_credit,
+              l.left_office_at
          FROM leaders l LEFT JOIN places p ON p.id = l.place_id WHERE l.slug = $1`,
       [slug],
     );
@@ -460,6 +464,9 @@ export async function civicRoutes(
         party: l.party,
         inOffice: l.in_office,
         claimed: l.account_id !== null,
+        photoUrl: l.photo_url,
+        photoCredit: l.photo_credit,
+        leftOfficeAt: l.left_office_at ? day(l.left_office_at) : null,
         bio: l.bio,
         isSample: l.is_sample,
         place: l.place_slug ? { slug: l.place_slug, name: l.place_name } : null,

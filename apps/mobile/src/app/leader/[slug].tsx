@@ -3,7 +3,6 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
-import { Avatar } from '@/components/avatar';
 import {
   BillCard,
   FollowToggle,
@@ -14,6 +13,7 @@ import {
 } from '@/components/civic';
 import { Button, ErrorText, Field } from '@/components/form';
 import { Empty, ScoresTab } from '@/components/place-sections';
+import { LeaderPhoto, StancesTab } from '@/components/leader-sections';
 import { Screen } from '@/components/screen';
 import { timeAgo } from '@/components/social';
 import { ThemedText } from '@/components/themed-text';
@@ -30,10 +30,11 @@ import {
 } from '@/lib/api';
 import { isFullyOnboarded, useAuth } from '@/lib/auth';
 
-type Tab = 'legislation' | 'scores' | 'requests';
+type Tab = 'legislation' | 'scores' | 'stances' | 'requests';
 const TABS: readonly { key: Tab; label: string }[] = [
   { key: 'legislation', label: 'Legislation' },
   { key: 'scores', label: 'Scores' },
+  { key: 'stances', label: 'Positions' },
   { key: 'requests', label: 'Requests' },
 ];
 
@@ -61,7 +62,7 @@ export default function LeaderScreen() {
       </View>
       <View style={styles.header}>
         <View style={[styles.avatarRing, { borderColor: theme.background }]}>
-          <Avatar name={leader?.name ?? null} size={76} />
+          <LeaderPhoto name={leader?.name ?? null} photoUrl={leader?.photoUrl} size={76} />
         </View>
         <View style={styles.nameRow}>
           <ThemedText type="subtitle" style={styles.flex}>
@@ -89,9 +90,23 @@ export default function LeaderScreen() {
             ) : null}
             {!leader.inOffice ? (
               <ThemedText type="caption" themeColor="textSecondary">
-                No longer in office: this page is read-only and scores are frozen.
+                No longer in office{leader.leftOfficeAt ? ` since ${leader.leftOfficeAt}` : ''}:
+                this page is read-only and scores are frozen.
               </ThemedText>
             ) : null}
+            {leader.photoCredit ? (
+              <ThemedText type="caption" themeColor="textSecondary">
+                Photo: {leader.photoCredit} (via Congress.gov)
+              </ThemedText>
+            ) : null}
+            <View style={styles.headerActions}>
+              <Button
+                title="Compare"
+                size="small"
+                variant="secondary"
+                onPress={() => router.push({ pathname: '/compare', params: { a: leader.slug } })}
+              />
+            </View>
           </>
         ) : null}
       </View>
@@ -105,6 +120,7 @@ export default function LeaderScreen() {
       <Tabs tabs={TABS} value={current} onChange={setCurrent} />
       {leader && current === 'legislation' ? <LegislationTab leader={leader} /> : null}
       {leader && current === 'scores' ? <ScoresTab kind="leader" slug={leader.slug} /> : null}
+      {leader && current === 'stances' ? <StancesTab slug={leader.slug} /> : null}
       {leader && current === 'requests' ? <RequestsTab leader={leader} /> : null}
     </Screen>
   );
@@ -503,6 +519,7 @@ function RequestStatusChip({ status }: { status: RequestStatus }) {
 }
 
 const styles = StyleSheet.create({
+  headerActions: { flexDirection: 'row', gap: Spacing.two, marginTop: Spacing.two },
   banner2: {
     marginHorizontal: Spacing.three,
     marginTop: Spacing.two,

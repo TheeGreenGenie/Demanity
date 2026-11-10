@@ -7,6 +7,7 @@ import { ROUTE_LIMITS, rateLimitKey, type RouteLimits } from './rate-limit.js';
 import { ResponseCache } from './cache.js';
 import { applicationRoutes } from './routes/applications.js';
 import { billPageRoutes } from './routes/bill-pages.js';
+import { leaderExtraRoutes } from './routes/leaders-extra.js';
 import { contentModerationRoutes } from './routes/content-moderation.js';
 import { citationRoutes } from './routes/citations.js';
 import { civicRoutes } from './routes/civic.js';
@@ -101,6 +102,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     await app.register(async (scoped) => applicationRoutes(scoped, { pool, limits }));
     await app.register(async (scoped) => contentModerationRoutes(scoped, { pool, limits }));
     await app.register(async (scoped) => billPageRoutes(scoped, { pool, limits, cache }));
+    await app.register(async (scoped) => leaderExtraRoutes(scoped, { pool }));
   }
 
   return app;

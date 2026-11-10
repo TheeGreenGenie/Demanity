@@ -68,6 +68,8 @@ export const REASON_CODES = {
     accept: ['contribution_verified'],
     reject: ['not_verifiable', 'duplicate_contribution', 'off_topic', 'other_policy_violation'],
   },
+  // Leader stances (with an approved source).
+  stance: ['stance_documented'],
   recovery: {
     approve: ['ownership_plausible'],
     deny: ['ownership_not_established', 'suspected_takeover'],

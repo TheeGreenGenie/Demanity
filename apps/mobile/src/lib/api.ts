@@ -315,6 +315,10 @@ export interface CourtCase {
 
 export interface Leader {
   claimed: boolean;
+  /** Official photo (members of Congress) and its required credit line. */
+  photoUrl: string | null;
+  photoCredit: string | null;
+  leftOfficeAt: string | null;
   slug: string;
   name: string;
   office: string;
@@ -538,6 +542,32 @@ export interface PendingContribution {
   sourceUrl: string | null;
 }
 
+export interface Stance {
+  id: string;
+  categorySlug: string;
+  categoryName: string;
+  position: 'support' | 'oppose' | 'mixed';
+  statement: string;
+  sourceUrl: string;
+  sourceName: string;
+  statedOn: string;
+}
+
+export interface CompareSide {
+  leader: {
+    slug: string;
+    name: string;
+    office: string;
+    party: string;
+    photoUrl: string | null;
+    inOffice: boolean;
+  };
+  overall: Overall;
+  citations: number;
+  scores: Record<string, CategoryScore>;
+  stances: Record<string, Stance>;
+}
+
 export type FollowKind = 'community' | 'user' | 'leader' | 'place' | 'bill';
 
 export interface FollowedItem {
@@ -614,6 +644,26 @@ export const moderation = {
     id: string,
     body: { status: 'done' | 'removed' | 'merged'; reasonCode: string; mergeInto?: string },
   ) => request<{ status: string }>('PATCH', `/v1/leader-requests/${id}`, { token, body }),
+};
+
+export const leaders = {
+  stances: (slug: string) => request<{ stances: Stance[] }>('GET', `/v1/leaders/${slug}/stances`),
+  addStance: (
+    token: string,
+    slug: string,
+    body: {
+      category: string;
+      position: 'support' | 'oppose' | 'mixed';
+      statement: string;
+      sourceUrl: string;
+      statedOn: string;
+    },
+  ) => request<{ id: string }>('POST', `/v1/moderation/leaders/${slug}/stances`, { token, body }),
+  compare: (a: string, b: string) =>
+    request<{ a: CompareSide; b: CompareSide; categories: { slug: string; name: string }[] }>(
+      'GET',
+      `/v1/compare?a=${a}&b=${b}`,
+    ),
 };
 
 export const bills = {
@@ -845,6 +895,7 @@ export function describeError(err: unknown): string {
     cannot_follow_self: 'You can’t follow yourself.',
     not_found: 'That could not be found.',
     already_voted: 'You already voted on this.',
+    pick_two_different_leaders: 'Pick two different leaders to compare.',
     source_required: 'Missing items need a link to an official source.',
     slow_mode: 'This thread is busy. To keep it readable, you can comment once every 2 minutes.',
     already_appealed: 'You already appealed this.',
