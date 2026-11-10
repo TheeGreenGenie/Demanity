@@ -1,4 +1,5 @@
 import type { Pool, PoolClient } from '@demanity/db';
+import { recomputeContributionScores } from './contribution.js';
 import { remapSubjectTopics } from '../ingest/subjects.js';
 import { TRUST_V1, trustScore, wilsonLowerBound, type TrustCitation } from './trust.js';
 
@@ -228,6 +229,9 @@ export async function recomputeRollups(
 
     // 1b. Leader trust scores from accepted citations.
     await recomputeTrust(client, now);
+
+    // 1c. Contribution scores; grants below the threshold are revoked (SCORING.md §5).
+    await recomputeContributionScores(client);
 
     // 2. Applicability.
     await client.query(

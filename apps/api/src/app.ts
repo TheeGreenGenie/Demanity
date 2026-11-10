@@ -11,6 +11,9 @@ import { communityV2Routes } from './routes/community-v2.js';
 import { leaderExtraRoutes } from './routes/leaders-extra.js';
 import { contentModerationRoutes } from './routes/content-moderation.js';
 import { citationRoutes } from './routes/citations.js';
+import { factCheckRoutes } from './routes/fact-checks.js';
+import { perspectiveRoutes } from './routes/perspectives.js';
+import type { FactCheckProvider } from './factcheck/ai.js';
 import { civicRoutes } from './routes/civic.js';
 import { moderationRoutes } from './routes/moderation.js';
 import { socialRoutes } from './routes/social.js';
@@ -41,6 +44,8 @@ export interface AppDeps {
   rateLimit: { secret: Buffer; redis?: Redis; now?: () => Date; routeLimits?: RouteLimits };
   /** Response cache tuning; tests use versionCheckMs: 0 to see recomputes immediately. */
   cache?: { versionCheckMs?: number };
+  /** Fact-check pipeline: optional AI first pass and the flag threshold. */
+  factCheck?: { provider?: FactCheckProvider | null; flagThreshold?: number };
 }
 
 export interface BuildAppOptions {
@@ -105,6 +110,10 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     await app.register(async (scoped) => billPageRoutes(scoped, { pool, limits, cache }));
     await app.register(async (scoped) => leaderExtraRoutes(scoped, { pool }));
     await app.register(async (scoped) => communityV2Routes(scoped, { pool, limits, cache }));
+    await app.register(async (scoped) =>
+      factCheckRoutes(scoped, { pool, limits, ...(options.deps!.factCheck ?? {}) }),
+    );
+    await app.register(async (scoped) => perspectiveRoutes(scoped, { pool, limits }));
   }
 
   return app;

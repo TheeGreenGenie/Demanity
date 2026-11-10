@@ -127,6 +127,15 @@ function CitationCard({ citation }: { citation: Citation }) {
           ? `Counts with strength ${c.strength.toFixed(2)} (${accVotes} accuracy vote${accVotes === 1 ? '' : 's'}). Approval is shown, not scored.`
           : 'No accuracy votes yet, so it doesn’t affect the score.'}
       </ThemedText>
+      {/* Opt-in: the perspectives are never shown unless you choose to open them. */}
+      <Pressable
+        accessibilityRole="link"
+        onPress={() => router.push({ pathname: '/perspectives', params: { citation: c.id } })}
+      >
+        <ThemedText type="caption" themeColor="textSecondary" style={styles.optIn}>
+          Does this citation offend you?
+        </ThemedText>
+      </Pressable>
       <ErrorText message={error} />
     </View>
   );
@@ -181,6 +190,7 @@ function VoteGroup({
 }
 
 const styles = StyleSheet.create({
+  optIn: { textDecorationLine: 'underline' },
   wrap: { gap: Spacing.two, marginTop: Spacing.two },
   card: { borderLeftWidth: 3, borderRadius: Radius.small, padding: Spacing.two, gap: 4 },
   source: { flexDirection: 'row', alignItems: 'center', gap: 4 },

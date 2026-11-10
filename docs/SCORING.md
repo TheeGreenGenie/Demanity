@@ -162,6 +162,8 @@ CS = Σ_citations [0.8 × WilsonLB(accurate) + 0.2 × WilsonLB(approve)]
 
 - A takedown is heavily negative. Needing a context note is slightly negative.
 - Falling below the low-trust threshold (config) revokes contributor status. Status otherwise renews yearly.
+- **As built (REVIEW BEFORE RELEASE):** only accepted citations count in the first sum. A takedown is a citation a moderator removed after accepting it, or a removed perspective. The threshold is `CONTRIBUTOR_MIN_SCORE` (default **−3**, revoke when strictly below), so one takedown alone does not revoke someone with any record, but two do. Scores are recomputed in the 5-minute batch job ([ADR 0007](adr/0007-precomputed-civic-data.md)). An automatic revocation removes every grant the account holds and is logged publicly as `contributor.revoked_automatically` with actor "system". A contributor sees their own score; nobody else does.
+- **Worked example:** one accepted citation with 9 of 10 "accurate" votes and no approval votes scores 0.8 × WilsonLB(9, 10) = 0.8 × 0.596 = 0.477. After two takedowns: 0.477 − 6 = −5.52, which is below −3, so status is revoked.
 
 ## 6. Known limitations
 - Scores reflect the judgment of **self-selected verified users**, not of the US population.

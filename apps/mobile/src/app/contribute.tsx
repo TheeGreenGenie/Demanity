@@ -8,7 +8,15 @@ import { Screen } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
 import { Brand, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { civic, describeError, social, type Community, type ContributorStatus } from '@/lib/api';
+import {
+  civic,
+  describeError,
+  perspectives,
+  social,
+  type Community,
+  type ContributionScore,
+  type ContributorStatus,
+} from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 
 const MIN = 300;
@@ -31,6 +39,7 @@ export default function ContributeScreen() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<ContributorStatus | null>(null);
+  const [score, setScore] = useState<ContributionScore | null>(null);
 
   const loadStatus = () => {
     if (token)
@@ -40,6 +49,11 @@ export default function ContributeScreen() {
         .catch(() => undefined);
   };
   useEffect(() => {
+    if (token)
+      perspectives
+        .myScore(token)
+        .then(setScore)
+        .catch(() => undefined);
     social
       .communities(null, 'topic')
       .then((r) => setTopics(r.communities))
@@ -83,6 +97,22 @@ export default function ContributeScreen() {
           them.
         </ThemedText>
       </View>
+
+      {score?.score ? (
+        <View style={[styles.card, { backgroundColor: theme.backgroundElement }]}>
+          <ThemedText type="smallBold">
+            Your contribution score: {score.score.score.toFixed(2)}
+          </ThemedText>
+          <ThemedText type="caption" themeColor="textSecondary">
+            {score.score.citations} accepted citations · {score.score.perspectives} perspectives ·{' '}
+            {score.score.takedowns} takedowns · {score.score.noted} needed a context note. Below{' '}
+            {score.revokeBelow}, contributor status is revoked automatically. Only you see this.
+          </ThemedText>
+          <ThemedText type="caption" themeColor="textSecondary">
+            {score.formula}
+          </ThemedText>
+        </View>
+      ) : null}
 
       <Section title="Topic" />
       <ScrollView horizontal showsHorizontalScrollIndicator={false}>

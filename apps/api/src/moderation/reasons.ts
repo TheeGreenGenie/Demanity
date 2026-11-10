@@ -26,7 +26,7 @@ export const REASON_CODES = {
     'doxxing',
     'other_policy_violation',
   ],
-  // Leader requests (docs/LEGISLATION.md �3b).
+  // Leader requests (docs/LEGISLATION.md §3b).
   request: [
     'leader_action_documented',
     'duplicate_request',
@@ -72,6 +72,10 @@ export const REASON_CODES = {
   stance: ['stance_documented'],
   // Organization page (R22).
   org: ['org_proposal', 'org_response'],
+  // Fact-check panels decide by majority (docs/MODERATION.md §4).
+  factCheck: ['panel_majority'],
+  // Devil's-advocate entries on citations (docs/MODERATION.md §6).
+  perspective: ['abusive_entry', 'source_does_not_support_claim', 'other_policy_violation'],
   recovery: {
     approve: ['ownership_plausible'],
     deny: ['ownership_not_established', 'suspected_takeover'],

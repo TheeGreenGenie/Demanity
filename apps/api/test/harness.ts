@@ -13,7 +13,7 @@ import { EmailOtpProvider } from '../../vault/src/providers/otp.js';
 import { ChannelRouter } from '../../vault/src/providers/two-factor.js';
 import { FakeVerifier } from '../../vault/src/providers/verifier.js';
 import { VaultService } from '../../vault/src/service.js';
-import { buildApp } from '../src/app.js';
+import { buildApp, type AppDeps } from '../src/app.js';
 import { MemoryChallengeStore } from '../src/auth/challenges.js';
 import { HttpVaultClient } from '../src/vault-client.js';
 import { SoftAuthenticator } from './soft-authenticator.js';
@@ -35,7 +35,9 @@ export interface Harness {
   close(): Promise<void>;
 }
 
-export async function createHarness(): Promise<Harness> {
+export async function createHarness(
+  opts: { factCheck?: AppDeps['factCheck'] } = {},
+): Promise<Harness> {
   const apiDb = await createTempDatabase();
   const vaultDb = await createTempDatabase();
   const apiPool = createPool(apiDb.url);
@@ -74,6 +76,7 @@ export async function createHarness(): Promise<Harness> {
       challenges: new MemoryChallengeStore(),
       rp: RP,
       cache: { versionCheckMs: 0 },
+      ...(opts.factCheck ? { factCheck: opts.factCheck } : {}),
       rateLimit: {
         secret: randomBytes(32),
         routeLimits: {

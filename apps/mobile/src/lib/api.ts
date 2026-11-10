@@ -736,6 +736,116 @@ export const community = {
     }),
 };
 
+export type FactCheckLabel = 'verified' | 'context_added' | 'misleading' | 'removed';
+export interface CommentFactCheck {
+  id?: string;
+  status: 'in_review' | 'decided';
+  outcome?: FactCheckLabel;
+  label?: string;
+  panel?: string;
+  reversed?: boolean;
+  decidedAt?: string;
+}
+export interface FactCheckDraft {
+  summary: string;
+  claims: { claim: string; assessment: string; reasoning: string }[];
+  suggestedLabel: FactCheckLabel;
+  whereToCheck: { domain: string; what: string }[];
+  injectionAttemptDetected: boolean;
+}
+export interface FactCheckSeat {
+  id: string;
+  trigger: 'flags' | 'author_request' | 'reversal';
+  aiStatus: 'disabled' | 'pending' | 'done' | 'failed';
+  aiDraft: FactCheckDraft | null;
+  aiModel: string | null;
+  comment: string;
+  commentId: string;
+  postId: string;
+  postTitle: string;
+  myVote: FactCheckLabel | null;
+  votesIn: number;
+  previousOutcome: FactCheckLabel | null;
+}
+export interface Perspective {
+  id: string;
+  body: string;
+  sourceUrl: string;
+  sourceName: string;
+  helpful: number;
+  votes: number;
+  voted: boolean;
+  mine: boolean;
+  createdAt: string;
+}
+export interface ContributionScore {
+  score: {
+    score: number;
+    citations: number;
+    perspectives: number;
+    takedowns: number;
+    noted: number;
+    computedAt: string;
+  } | null;
+  revokeBelow: number;
+  formula: string;
+}
+
+export const factChecks = {
+  labels: (postId: string) =>
+    request<{ labels: Record<string, CommentFactCheck>; note: string }>(
+      'GET',
+      `/v1/posts/${postId}/fact-checks`,
+    ),
+  flag: (token: string, commentId: string) =>
+    request<{ status: string }>('POST', `/v1/comments/${commentId}/fact-check/flag`, { token }),
+  request: (token: string, commentId: string) =>
+    request<{ status: string }>('POST', `/v1/comments/${commentId}/fact-check/request`, { token }),
+  reversal: (token: string, id: string) =>
+    request<{ status: string }>('POST', `/v1/fact-checks/${id}/reversal`, { token }),
+  queue: (token: string) =>
+    request<{ assigned: FactCheckSeat[]; awaitingPanel: number }>(
+      'GET',
+      '/v1/moderation/fact-checks',
+      { token },
+    ),
+  vote: (token: string, id: string, vote: FactCheckLabel) =>
+    request<{ status: string; outcome?: FactCheckLabel }>(
+      'POST',
+      `/v1/moderation/fact-checks/${id}/vote`,
+      { token, body: { vote } },
+    ),
+  setLean: (token: string, lean: 'left' | 'center' | 'right') =>
+    request<void>('PUT', '/v1/moderation/lean', { token, body: { lean } }),
+  leans: () => request<{ leans: Record<string, number> }>('GET', '/v1/moderation/leans'),
+};
+
+export const perspectives = {
+  list: (token: string | null, citationId: string) =>
+    request<{
+      citation: { claim: string; category: string; leader: string };
+      intro: string;
+      entries: Perspective[];
+    }>('GET', `/v1/citations/${citationId}/perspectives`, { token }),
+  add: (token: string, citationId: string, body: string, sourceUrl: string) =>
+    request<{ id: string }>('POST', `/v1/citations/${citationId}/perspectives`, {
+      token,
+      body: { body, sourceUrl },
+    }),
+  vote: (token: string, id: string, helpful: boolean) =>
+    request<{ status: string }>('POST', `/v1/perspectives/${id}/vote`, {
+      token,
+      body: { helpful },
+    }),
+  remove: (token: string, id: string, reasonCode: string) =>
+    request<{ status: string }>('POST', `/v1/moderation/perspectives/${id}/remove`, {
+      token,
+      body: { reasonCode },
+    }),
+  myScore: (token: string) =>
+    request<ContributionScore>('GET', '/v1/me/contribution-score', { token }),
+};
+
 export const leaders = {
   stances: (slug: string) => request<{ stances: Stance[] }>('GET', `/v1/leaders/${slug}/stances`),
   addStance: (
@@ -1014,8 +1124,18 @@ export function describeError(err: unknown): string {
     moderator_only: 'Only moderators can do that.',
     cannot_decide_own_case: 'You can’t review your own submission.',
     election_closed: 'This election has already happened.',
-    already_weighed_in: 'You already weighed in on this bill. Stances can�t be changed.',
+    already_weighed_in: 'You already weighed in on this bill. Stances can’t be changed.',
     leader_not_in_office: 'This leader is no longer in office.',
+    already_flagged: 'You already flagged this for a fact-check.',
+    use_request_for_own_comment: 'For your own comment, use “Request a fact-check”.',
+    author_only: 'Only the author can request this.',
+    already_reviewed: 'This has already been reviewed.',
+    review_in_progress: 'A review is already in progress.',
+    not_on_panel: 'You aren’t on this panel.',
+    sat_on_a_panel: 'You sat on a panel for this comment, so a different moderator must ask.',
+    own_citation: 'You can’t add a perspective to your own citation.',
+    own_entry: 'You can’t vote on your own entry.',
+    already_contributed: 'You already added a perspective to this citation.',
   };
   if (err.status === 429) return 'Too many attempts. Please wait a little and try again.';
   return messages[err.code] ?? 'Something went wrong. Please try again.';

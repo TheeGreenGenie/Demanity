@@ -20,6 +20,7 @@
 - **SheerID** (identity verification): sees the identity attributes submitted during verification.
 - **Resend** (default 2FA, email delivery only): sees the email address and the message containing the code. Demanity generates and checks codes itself and stores them only as hashes.
 - **Twilio Verify** (optional SMS 2FA, enabled only if configured): sees the phone number when it sends a code.
+- **Anthropic** (optional AI fact-check draft, enabled only if configured; [ADR 0009](adr/0009-ai-fact-check-first-pass.md)): sees the text of a public comment under fact-check review and the title of its post. It never sees who wrote it, who flagged it, or any account data.
 
 ### Bill stances
 How a member swiped on a bill is never stored with their account. Mock election ballots follow the same design: only "voted in this election" is stored, never the candidate. Your own stances are remembered only on your device. Only the fact that they weighed in is stored, with no time and no direction; the direction is added to an anonymous per-bill total ([LEGISLATION.md §3a](LEGISLATION.md)).

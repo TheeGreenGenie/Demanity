@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { createPool, migrate } from '@demanity/db';
 import { Redis } from 'ioredis';
 import { buildApp, loggerOptions } from './app.js';
+import { factCheckProviderFromEnv } from './factcheck/ai.js';
 import { RedisChallengeStore } from './auth/challenges.js';
 import { loadConfig, loadServiceConfig } from './config.js';
 import { assertNoDevSeedData } from './dev-seed-guard.js';
@@ -41,6 +42,8 @@ const app = await buildApp({
     challenges: new RedisChallengeStore(redis),
     rp: svc.rp,
     rateLimit: { secret: svc.rateLimitSecret, redis },
+    // AI first pass is off unless FACT_CHECK_AI=anthropic and a key are set.
+    factCheck: { provider: factCheckProviderFromEnv() },
   },
 });
 

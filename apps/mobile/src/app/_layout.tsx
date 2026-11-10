@@ -43,6 +43,7 @@ function RootStack() {
       <Stack.Screen name="ideas" options={{ title: '' }} />
       <Stack.Screen name="compare" options={{ title: 'Compare' }} />
       <Stack.Screen name="org" options={{ title: '' }} />
+      <Stack.Screen name="perspectives" options={{ title: 'Other perspectives' }} />
       {/* Onboarding needs a session; writing needs a finished sign-up. */}
       <Stack.Protected guard={!ready || token !== null}>
         <Stack.Screen name="onboarding" options={{ title: '' }} />

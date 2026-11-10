@@ -7,6 +7,7 @@ import { Button, ErrorText, Field } from '@/components/form';
 import { ActionPill, CommunityIcon, ThreadedComments, VotePill } from '@/components/forum';
 import { AppealBox, ContextNotes, ModeratorPanel } from '@/components/moderation-tools';
 import { PollCard, RepostButton } from '@/components/community-v2';
+import { CommentFactCheckRow, useFactChecks } from '@/components/fact-check';
 import { Screen } from '@/components/screen';
 import { timeAgo } from '@/components/social';
 import { ThemedText } from '@/components/themed-text';
@@ -29,6 +30,7 @@ export default function PostScreen() {
   const [busy, setBusy] = useState(false);
   // Bumped after a moderator action so notes reload.
   const [version, setVersion] = useState(0);
+  const { labels: factLabels, reload: reloadFacts } = useFactChecks(id);
 
   const load = useCallback(async () => {
     try {
@@ -211,6 +213,7 @@ export default function PostScreen() {
         onReply={member && !removed ? setReplyTo : undefined}
         renderExtra={(c) => (
           <>
+            <CommentFactCheckRow comment={c} check={factLabels[c.id]} onDone={reloadFacts} />
             {c.status === 'visible' ? (
               <ContextNotes targetType="comment" targetId={c.id} version={version} />
             ) : null}

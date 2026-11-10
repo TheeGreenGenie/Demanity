@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Linking, Pressable, StyleSheet, View } from 'react-native';
 
 import { Chips, Section } from '@/components/civic';
+import { FactCheckQueue } from '@/components/fact-check';
 import { Button, ErrorText } from '@/components/form';
 import { Screen } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
@@ -78,6 +79,7 @@ export default function ModerationScreen() {
         variant="ghost"
         onPress={() => router.push('/log')}
       />
+      <FactCheckQueue />
       <Section
         title={`Citations (${items?.length ?? 0})`}
         caption="Check that the source supports the claim."

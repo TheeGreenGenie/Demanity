@@ -700,7 +700,7 @@ export function LeaderRow({ leader }: { leader: LeaderSummary }) {
 }
 
 export const STANCE_PRIVACY =
-  'Private by design: Demanity records that you weighed in, not which way. Your choice is only added to an anonymous total, and it can�t be changed.';
+  'Private by design: Demanity records that you weighed in, not which way. Your choice is only added to an anonymous total, and it can’t be changed.';
 
 /**
  * Follow button for leaders, places and bills. Fetches its own state, since

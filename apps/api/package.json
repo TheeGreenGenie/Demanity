@@ -23,6 +23,7 @@
     "ingest:members": "tsx src/ingest/run.ts --source members"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.8.0",
     "@demanity/db": "workspace:*",
     "@fastify/cors": "^11.4.1",
     "@fastify/rate-limit": "^11.2.2",
