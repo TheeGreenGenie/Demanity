@@ -1,6 +1,7 @@
 import pg from 'pg';
 
 export type Pool = pg.Pool;
+export type PoolClient = pg.PoolClient;
 
 export function createPool(connectionString: string): Pool {
   if (!connectionString) {

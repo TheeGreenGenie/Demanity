@@ -28,6 +28,29 @@ Demanity is a **government accountability** app. It tracks every new government 
 5. **Contributor feed:** each category's contributor chat receives new items in its policy area.
 6. **A public data-freshness indicator** shows the last successful sync for each source.
 
+### What is implemented today (Congress.gov)
+- **Source:** the official Congress.gov API (`https://api.congress.gov/v3`), with a free api.data.gov key (`DATA_GOV_API_KEY`). Limits per the official docs: 5,000 requests per hour, at most 250 results per page.
+- **Schedule:** when a key is configured, the API server syncs hourly. It can also be run by hand: `pnpm --filter @demanity/api ingest:congress [--days N] [--max N]`.
+- **Incremental and idempotent:**
+  - Each run asks for bills updated since the last fully synced moment, oldest first.
+  - Records are upserted by `(source, external_id)`, e.g. `us:119:hr:1`, so re-running never duplicates anything.
+  - The cursor advances only after a successful run. A capped run resumes from the last bill it processed.
+- **Provenance on every bill:** the public Congress.gov page URL, the source's own update time, the fetch time and the latest action text.
+- **Sponsors** become leader records, keyed by their Bioguide ID. They have no scores until citations about them are accepted.
+- **Category** comes from the Congress.gov policy area. "Economics and Public Finance" is matched to "Economics & Public Finance".
+- **Status** is inferred from the latest action text, checked in this order (first match wins):
+  - "Became Public Law" or "signed by President" → signed;
+  - "Vetoed" → vetoed;
+  - "Failed of passage" or "not agreed to" → failed;
+  - "Presented to President" or "cleared for White House" → passed;
+  - "Passed House/Senate" or "agreed to in" → passed one chamber;
+  - "Referred to", "committee", "reported by" or "placed on calendar" → in committee;
+  - anything else, such as "Held at the desk" → introduced.
+
+  This is a heuristic. Pulling the full action history to determine status is a planned improvement.
+- **Not yet:** roll-call votes, cosponsors, summaries (Congress.gov publishes CRS summaries separately), state bills (Open States), executive orders and rulings.
+- **Freshness:** `GET /v1/data-freshness` reports, for each source, the moment it is synced through, the last success time, and whether the last run failed.
+
 ## 3. Item pages
 Each item page includes:
 - a plain-language summary

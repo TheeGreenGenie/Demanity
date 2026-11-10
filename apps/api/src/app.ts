@@ -5,6 +5,7 @@ import type { Redis } from 'ioredis';
 import type { Pool } from '@demanity/db';
 import { ROUTE_LIMITS, rateLimitKey, type RouteLimits } from './rate-limit.js';
 import { ResponseCache } from './cache.js';
+import { citationRoutes } from './routes/citations.js';
 import { civicRoutes } from './routes/civic.js';
 import { moderationRoutes } from './routes/moderation.js';
 import { socialRoutes } from './routes/social.js';
@@ -89,13 +90,11 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     await app.register(async (scoped) =>
       socialRoutes(scoped, { pool, limits: rl.routeLimits ?? ROUTE_LIMITS }),
     );
-    await app.register(async (scoped) =>
-      civicRoutes(scoped, {
-        pool,
-        limits: rl.routeLimits ?? ROUTE_LIMITS,
-        cache: new ResponseCache(pool, options.deps!.cache ?? {}),
-      }),
-    );
+    // One shared response cache for all public, viewer-independent pages (ADR 0007).
+    const cache = new ResponseCache(pool, options.deps.cache ?? {});
+    const limits = rl.routeLimits ?? ROUTE_LIMITS;
+    await app.register(async (scoped) => civicRoutes(scoped, { pool, limits, cache }));
+    await app.register(async (scoped) => citationRoutes(scoped, { pool, limits, cache }));
   }
 
   return app;

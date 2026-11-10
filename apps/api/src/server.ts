@@ -6,6 +6,8 @@ import { buildApp, loggerOptions } from './app.js';
 import { RedisChallengeStore } from './auth/challenges.js';
 import { loadConfig, loadServiceConfig } from './config.js';
 import { assertNoDevSeedData } from './dev-seed-guard.js';
+import { recomputeRollups } from './civic/rollups.js';
+import { CongressClient, syncCongressBills } from './ingest/congress.js';
 import { deleteStalePendingAccounts } from './moderation/service.js';
 import { HttpVaultClient } from './vault-client.js';
 
@@ -40,6 +42,51 @@ const cleanup = setInterval(
   60 * 60 * 1000,
 );
 cleanup.unref();
+
+// Every 5 minutes: if scoring inputs changed (citations accepted, votes cast),
+// recompute all derived scores in one batch (docs/adr/0007-precomputed-civic-data.md).
+let recomputing = false;
+const rollups = setInterval(
+  () => {
+    if (recomputing) return;
+    recomputing = true;
+    pool
+      .query<{ dirty: boolean }>('SELECT dirty FROM data_version')
+      .then(async ({ rows }) => {
+        if (!rows[0]?.dirty) return;
+        const { version } = await recomputeRollups(pool);
+        app.log.info({ version }, 'recomputed civic rollups');
+      })
+      .catch((err: Error) => app.log.error({ err: { name: err.name } }, 'rollup recompute failed'))
+      .finally(() => {
+        recomputing = false;
+      });
+  },
+  5 * 60 * 1000,
+);
+rollups.unref();
+
+// Hourly: sync new and updated bills from Congress.gov when a key is configured.
+if (svc.dataGovApiKey) {
+  const congress = new CongressClient(svc.dataGovApiKey);
+  let syncing = false;
+  const ingest = setInterval(
+    () => {
+      if (syncing) return;
+      syncing = true;
+      syncCongressBills(pool, congress, { maxBills: 500 })
+        .then((r) => app.log.info({ bills: r.bills }, 'congress.gov sync complete'))
+        .catch((err: Error) =>
+          app.log.error({ err: { name: err.name } }, 'congress.gov sync failed'),
+        )
+        .finally(() => {
+          syncing = false;
+        });
+    },
+    60 * 60 * 1000,
+  );
+  ingest.unref();
+}
 
 try {
   await app.listen({ host: config.host, port: config.port });

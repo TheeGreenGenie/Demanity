@@ -908,6 +908,28 @@ export async function civicRoutes(
     },
   );
 
+  // --- Data freshness (R23): when each source was last synced -----------------------
+
+  app.get('/v1/data-freshness', async () => {
+    const { rows } = await pool.query<{
+      source: string;
+      synced_through: Date | null;
+      last_success_at: Date | null;
+      last_error: string | null;
+    }>(
+      'SELECT source, synced_through, last_success_at, last_error FROM sync_state ORDER BY source',
+    );
+    return {
+      sources: rows.map((r) => ({
+        source: r.source,
+        syncedThrough: r.synced_through?.toISOString() ?? null,
+        lastSuccessAt: r.last_success_at?.toISOString() ?? null,
+        // Only whether the last run failed is public, not internal error text.
+        healthy: r.last_error === null,
+      })),
+    };
+  });
+
   // --- Humanity guides (cached) ---------------------------------------------------------
 
   app.get('/v1/guides', async (req, reply) =>

@@ -1,4 +1,5 @@
-import type { Pool } from '@demanity/db';
+import type { Pool, PoolClient } from '@demanity/db';
+import { TRUST_V1, trustScore, wilsonLowerBound, type TrustCitation } from './trust.js';
 
 /**
  * Precomputes everything derived from civic data, so requests never redo the
@@ -70,7 +71,114 @@ export function overallOf(rows: Array<{ score: number; n: number }>) {
   return { score: den > 0 ? Math.round(num / den) : null, counted, excluded };
 }
 
-export async function recomputeRollups(pool: Pool): Promise<{ version: number }> {
+/**
+ * Leader trust scores from accepted citations (docs/SCORING.md §2-§3).
+ * Writes one category_scores row per leader and category that has accepted
+ * citations. A real score replaces any sample row for that leader/category.
+ */
+async function recomputeTrust(client: PoolClient, now: Date): Promise<void> {
+  const { rows } = await client.query<{
+    id: string;
+    leader_id: string;
+    category_id: string;
+    category_name: string;
+    direction: 'positive' | 'negative';
+    action_date: Date;
+    trust_at_add: string | null;
+    accurate_yes: number;
+    accurate_no: number;
+    weight: string;
+    claim: string;
+    source_url: string;
+  }>(
+    `SELECT c.id, c.leader_id, c.category_id, cat.name AS category_name, c.direction, c.action_date,
+            c.trust_at_add, c.accurate_yes, c.accurate_no, s.weight, c.claim, c.source_url
+       FROM citations c
+       JOIN approved_sources s ON s.domain = c.source_domain
+       JOIN communities cat ON cat.id = c.category_id
+      WHERE c.status = 'accepted'`,
+  );
+  const groups = new Map<string, typeof rows>();
+  for (const r of rows) {
+    const k = `${r.leader_id}|${r.category_id}`;
+    const list = groups.get(k);
+    if (list) list.push(r);
+    else groups.set(k, [r]);
+  }
+  // Leaders who lost all accepted citations in a category lose that real score.
+  await client.query(
+    `DELETE FROM category_scores cs
+      WHERE cs.subject_type = 'leader' AND cs.method_version = $1
+        AND NOT EXISTS (SELECT 1 FROM citations c WHERE c.status = 'accepted'
+                         AND c.leader_id = cs.subject_id AND c.category_id = cs.category_id)`,
+    [TRUST_V1.methodVersion],
+  );
+  const asOf = now.toISOString().slice(0, 10);
+  for (const list of groups.values()) {
+    const first = list[0]!;
+    const input: TrustCitation[] = list.map((r) => ({
+      id: r.id,
+      direction: r.direction,
+      actionDate: r.action_date,
+      trustAtAdd: r.trust_at_add === null ? 0.5 : Number(r.trust_at_add),
+      accurateYes: r.accurate_yes,
+      accurateNo: r.accurate_no,
+      sourceWeight: Number(r.weight),
+    }));
+    const result = trustScore(input, now);
+    const byId = new Map(list.map((r) => [r.id, r]));
+    const evidence = [...result.contributions]
+      .sort((a, b) => Math.abs(b.x) - Math.abs(a.x))
+      .slice(0, 5)
+      .map((c) => {
+        const r = byId.get(c.id)!;
+        const votes = r.accurate_yes + r.accurate_no;
+        const pct = votes ? Math.round((r.accurate_yes / votes) * 100) : 0;
+        return {
+          label: `${r.direction === 'positive' ? 'Positive' : 'Negative'}: ${r.claim} (rated accurate by ${pct}% of ${votes}${c.gated ? '; waiting on streak' : ''})`,
+          url: r.source_url,
+        };
+      });
+    const score = Math.round(result.score);
+    const rationale =
+      `Based on ${result.counted} counted citation${result.counted === 1 ? '' : 's'} ` +
+      `(${result.positives} positive, ${result.negatives} negative) in ${first.category_name}. ` +
+      'Each citation is weighted by how accurate members rated it (Wilson lower bound) and by source quality; ' +
+      'older citations fade, failures where the leader was trusted weigh more, and positives count only after a streak.' +
+      (result.pendingStreak
+        ? ` Streak ${result.pendingStreak.have}/${result.pendingStreak.need}: newest positives not yet counted.`
+        : '') +
+      (result.counted < TRUST_V1.lowEvidenceBelow
+        ? ' Low evidence: treat as a first impression.'
+        : '');
+    await client.query(
+      `INSERT INTO category_scores (subject_type, subject_id, category_id, score, rationale, evidence,
+                                    evidence_count, method_version, as_of, is_sample)
+       VALUES ('leader', $1, $2, $3, $4, $5, $6, $7, $8, false)
+       ON CONFLICT (subject_type, subject_id, category_id) DO UPDATE
+         SET score = EXCLUDED.score, rationale = EXCLUDED.rationale, evidence = EXCLUDED.evidence,
+             evidence_count = EXCLUDED.evidence_count, method_version = EXCLUDED.method_version,
+             as_of = EXCLUDED.as_of, is_sample = false`,
+      [
+        first.leader_id,
+        first.category_id,
+        Math.min(100, Math.max(0, score)),
+        rationale,
+        JSON.stringify(evidence),
+        result.counted,
+        TRUST_V1.methodVersion,
+        asOf,
+      ],
+    );
+  }
+}
+
+export { wilsonLowerBound };
+
+export async function recomputeRollups(
+  pool: Pool,
+  now: Date = new Date(),
+): Promise<{ version: number }> {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -109,6 +217,9 @@ export async function recomputeRollups(pool: Pool): Promise<{ version: number }>
                .map(([k, v]) => `WHEN '${k}' THEN '${v}'`)
                .join(' ')} END
         FROM leaders l`;
+
+    // 1b. Leader trust scores from accepted citations.
+    await recomputeTrust(client, now);
 
     // 2. Applicability.
     await client.query(
@@ -232,7 +343,7 @@ export async function recomputeRollups(pool: Pool): Promise<{ version: number }>
     );
 
     const { rows } = await client.query<{ version: string }>(
-      'UPDATE data_version SET version = version + 1 RETURNING version',
+      'UPDATE data_version SET version = version + 1, dirty = false RETURNING version',
     );
     await client.query('COMMIT');
     return { version: Number(rows[0]!.version) };

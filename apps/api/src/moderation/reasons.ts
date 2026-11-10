@@ -33,6 +33,19 @@ export const REASON_CODES = {
     'not_a_request',
     'other_policy_violation',
   ],
+  // Citations (docs/SOURCES.md, docs/SCORING.md).
+  citation: {
+    accept: ['source_verified'],
+    reject: [
+      'source_does_not_support_claim',
+      'not_an_approved_source',
+      'duplicate_citation',
+      'wrong_category',
+      'other_policy_violation',
+    ],
+  },
+  // Contributor status: granted after an essay review, revoked for cause.
+  contributor: ['essay_approved', 'contribution_score_low', 'other_policy_violation'],
   recovery: {
     approve: ['ownership_plausible'],
     deny: ['ownership_not_established', 'suspected_takeover'],

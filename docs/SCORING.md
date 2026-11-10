@@ -92,6 +92,15 @@ score = 50 + 50 × Σ x_i / ( Σ |x_i| + k ),    k = 5
 
 > *Correction note:* an earlier plan draft wrote the denominator as `Σ|w·decay·gate|`, without `s`. That doesn't reproduce the 61/100 example. The denominator is `Σ|x_i|`, as above.
 
+## 3.4 Implementation notes (v1 as built)
+- **Code:** `apps/api/src/civic/trust.ts`. These are pure functions with unit tests that reproduce every number in this document: 0.596, 0.880, 61.25, N = 5/3/1, half-lives of 5.2 and 2.8 years, and multipliers of 1.3× and 0.7×.
+- **Streak gate choice:** N for a run of positives is taken from `t` of the **first** citation in the run. The bar a run must clear is set when the run starts. The document didn't specify which citation's `t` to use; this choice is open to review.
+- **No votes yet:** a citation with no accuracy votes has strength 0, so it doesn't move the score until members rate it.
+- **`t` (trust at add)** is recorded when a moderator accepts the citation: the leader's current real score in that category ÷ 100, or 0.5 if there is none yet.
+- **Bridging factor:** not applied yet; `w` is the source-quality weight alone.
+- **Recompute:** accepting a citation or casting an accuracy vote marks the data dirty. The server recomputes all scores in one batch every 5 minutes ([ADR 0007](adr/0007-precomputed-civic-data.md)).
+- **Privacy:** "Accurate?" and "Approve?" votes are stored as anonymous totals plus a record that an account voted, never which way. One vote of each kind per member; votes can't be changed.
+
 ## 3a. Which categories apply, and conditions vs. trust (proposal, REVIEW BEFORE RELEASE)
 - **Scored only where it applies.** Each policy area is mapped to the levels of government that act on it: federal, state, local or judicial. These mappings are kept as reference data (`category_levels`), so they can be changed later.
   - A subject is scored only in categories that apply at its level. Mayors are never scored on foreign policy or the armed forces, and cities are never scored on international affairs.

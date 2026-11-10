@@ -31,6 +31,9 @@ With real data there will be about 3,100 counties, more than 19,000 incorporated
    - A CDN in front of the API can therefore serve most place and leader traffic without reaching our servers at all.
 5. **Invalidation is one number.** Every recompute bumps `data_version`. Old cache entries simply stop matching. There is no per-key invalidation logic to get wrong.
 
+### Addendum: batching score inputs (2026-11-10)
+Accepting a citation, casting an accuracy vote and syncing new bills don't recompute anything immediately. They set a `dirty` flag. Every 5 minutes the server checks the flag, and if it is set, runs one full recompute and clears it. Scores therefore lag their inputs by at most about 5 minutes, and recompute cost is bounded by the clock, not by how many votes come in.
+
 ## Consequences
 - **Cost:** page views cost roughly a cache lookup. The expensive work happens once per data change, not once per visitor.
 - **Freshness:** after a data load, a visitor may see the previous numbers for up to about 70 seconds (10 seconds for the version check plus 60 seconds of HTTP cache). This is acceptable for statistics that change at most daily.

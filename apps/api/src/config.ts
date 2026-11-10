@@ -34,6 +34,8 @@ export interface ServiceConfig {
   vaultServiceToken: string;
   rateLimitSecret: Buffer;
   rp: { id: string; name: string; origins: string[] };
+  /** Optional: enables the hourly Congress.gov sync (api.data.gov key). */
+  dataGovApiKey: string | null;
 }
 
 function required(env: NodeJS.ProcessEnv, name: string): string {
@@ -61,5 +63,6 @@ export function loadServiceConfig(env: NodeJS.ProcessEnv = process.env): Service
     vaultServiceToken: required(env, 'VAULT_SERVICE_TOKEN'),
     rateLimitSecret: secret,
     rp: { id: required(env, 'WEBAUTHN_RP_ID'), name: 'Demanity', origins },
+    dataGovApiKey: env.DATA_GOV_API_KEY || null,
   };
 }
