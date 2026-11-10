@@ -44,6 +44,8 @@ function RootStack() {
       </Stack.Protected>
       <Stack.Protected guard={!ready || isFullyOnboarded(me)}>
         <Stack.Screen name="compose" options={{ title: 'New post', presentation: 'modal' }} />
+        <Stack.Screen name="cite" options={{ title: '', presentation: 'modal' }} />
+        <Stack.Screen name="moderation" options={{ title: 'Moderation' }} />
       </Stack.Protected>
     </Stack>
   );

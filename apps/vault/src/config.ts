@@ -1,3 +1,9 @@
+import {
+  CappedEmailSender,
+  CappedTwoFactor,
+  OutboundCap,
+  outboundLimits,
+} from './providers/outbound-cap.js';
 import type { Pool } from '@demanity/db';
 import { KMSClient } from '@aws-sdk/client-kms';
 import { LocalKeyProvider, type KeyProvider } from './crypto/envelope.js';
@@ -92,9 +98,22 @@ export function loadVaultConfig(env: NodeJS.ProcessEnv = process.env): VaultConf
 }
 
 /** Email is always available (free); SMS only when Twilio is configured. */
-export function buildTwoFactor(config: VaultConfig, pool: Pool): TwoFactorProvider {
+export function buildTwoFactor(
+  config: VaultConfig,
+  pool: Pool,
+  env: NodeJS.ProcessEnv = process.env,
+): TwoFactorProvider {
+  // Service-wide caps keep us inside provider quotas (providers/outbound-cap.ts).
+  const limits = outboundLimits(env);
+  // Only real providers have quotas; the development console sender is uncapped.
+  const email =
+    config.emailSender instanceof ResendEmailSender
+      ? new CappedEmailSender(config.emailSender, new OutboundCap(pool, 'email', limits.email))
+      : config.emailSender;
   return new ChannelRouter({
-    email: new EmailOtpProvider(pool, config.lookupKey, config.emailSender),
-    ...(config.sms ? { sms: config.sms } : {}),
+    email: new EmailOtpProvider(pool, config.lookupKey, email),
+    ...(config.sms
+      ? { sms: new CappedTwoFactor(config.sms, new OutboundCap(pool, 'sms', limits.sms)) }
+      : {}),
   });
 }

@@ -1,13 +1,40 @@
+import { useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
 
 import { Avatar } from '@/components/avatar';
 import { Button } from '@/components/form';
+import { civic } from '@/lib/api';
 import { Screen } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
 import { Brand, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { isFullyOnboarded, useAuth } from '@/lib/auth';
+
+/** Shown only to moderators (the review queue answers 403 for everyone else). */
+function ModeratorLink() {
+  const router = useRouter();
+  const { token } = useAuth();
+  const [pending, setPending] = useState<number | null>(null);
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    civic
+      .pendingCitations(token)
+      .then((r) => !cancelled && setPending(r.citations.length))
+      .catch(() => !cancelled && setPending(null));
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
+  if (pending === null) return null;
+  return (
+    <Button
+      title={`Moderator review (${pending} waiting)`}
+      onPress={() => router.push('/moderation')}
+    />
+  );
+}
 
 export default function AccountScreen() {
   const router = useRouter();
@@ -55,6 +82,7 @@ export default function AccountScreen() {
           </ThemedText>
         ))}
       </View>
+      <ModeratorLink />
       <Button
         title="View your public profile"
         variant="secondary"

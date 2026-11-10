@@ -7,6 +7,7 @@ import { RedisChallengeStore } from './auth/challenges.js';
 import { loadConfig, loadServiceConfig } from './config.js';
 import { assertNoDevSeedData } from './dev-seed-guard.js';
 import { recomputeRollups } from './civic/rollups.js';
+import { ApiBudget, CONGRESS_BUDGET, ingestCaps } from './ingest/budget.js';
 import { CongressClient, syncCongressBills } from './ingest/congress.js';
 import { deleteStalePendingAccounts } from './moderation/service.js';
 import { HttpVaultClient } from './vault-client.js';
@@ -68,14 +69,27 @@ rollups.unref();
 
 // Hourly: sync new and updated bills from Congress.gov when a key is configured.
 if (svc.dataGovApiKey) {
-  const congress = new CongressClient(svc.dataGovApiKey);
+  const caps = ingestCaps(config.nodeEnv);
+  const congress = new CongressClient(
+    svc.dataGovApiKey,
+    fetch,
+    new ApiBudget(pool, 'congress.gov', { ...CONGRESS_BUDGET, perHour: caps.congressPerHour }),
+  );
   let syncing = false;
   const ingest = setInterval(
     () => {
       if (syncing) return;
       syncing = true;
-      syncCongressBills(pool, congress, { maxBills: 500 })
-        .then((r) => app.log.info({ bills: r.bills }, 'congress.gov sync complete'))
+      syncCongressBills(pool, congress, {
+        maxBills: caps.maxBillsPerRun,
+        defaultLookbackDays: caps.lookbackDays,
+      })
+        .then((r) =>
+          app.log.info(
+            { bills: r.bills, stoppedEarly: r.stoppedEarly },
+            'congress.gov sync complete',
+          ),
+        )
         .catch((err: Error) =>
           app.log.error({ err: { name: err.name } }, 'congress.gov sync failed'),
         )

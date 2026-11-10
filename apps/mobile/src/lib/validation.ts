@@ -64,3 +64,6 @@ export function validateEmail(e: string): string | null {
     ? null
     : 'Enter a valid email address, like name@example.com.';
 }
+
+/** Any past (or today's) date in MM/DD/YYYY or YYYY-MM-DD, e.g. when a cited action happened. */
+export const parsePastDate = parseBirthDate;

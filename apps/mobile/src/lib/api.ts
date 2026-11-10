@@ -372,6 +372,49 @@ export interface Election {
   meanAbsoluteErrorPoints: number | null;
 }
 
+export interface Citation {
+  id: string;
+  categorySlug: string;
+  categoryName: string;
+  direction: 'positive' | 'negative';
+  claim: string;
+  sourceUrl: string;
+  sourceName: string;
+  actionDate: string;
+  /** "Contributor", or "Cited by <leader>" when a leader submitted it. */
+  attribution: string;
+  accurateYes: number;
+  accurateNo: number;
+  approveYes: number;
+  approveNo: number;
+  /** Wilson lower bound of the accuracy votes (what the score uses). */
+  strength: number;
+  votedAccurate: boolean;
+  votedApprove: boolean;
+}
+
+export interface PendingCitation {
+  id: string;
+  leaderSlug: string;
+  leaderName: string;
+  categorySlug: string;
+  direction: 'positive' | 'negative';
+  claim: string;
+  sourceUrl: string;
+  sourceDomain: string;
+  actionDate: string;
+  byLeader: boolean;
+}
+
+export interface Freshness {
+  sources: {
+    source: string;
+    syncedThrough: string | null;
+    lastSuccessAt: string | null;
+    healthy: boolean;
+  }[];
+}
+
 export type FollowKind = 'community' | 'user' | 'leader' | 'place' | 'bill';
 
 export interface FollowedItem {
@@ -439,6 +482,46 @@ export const civic = {
     request<{ following: boolean }>('GET', `/v1/follows/${kind}/${encodeURIComponent(name)}`, {
       token,
     }),
+  citations: (token: string | null, slug: string, category?: string) =>
+    request<{ citations: Citation[] }>(
+      'GET',
+      `/v1/leaders/${slug}/citations${category ? `?category=${category}` : ''}`,
+      { token },
+    ),
+  submitCitation: (
+    token: string,
+    slug: string,
+    body: {
+      category: string;
+      direction: 'positive' | 'negative';
+      claim: string;
+      sourceUrl: string;
+      actionDate: string;
+    },
+  ) =>
+    request<{ id: string; status: string }>('POST', `/v1/leaders/${slug}/citations`, {
+      token,
+      body,
+    }),
+  voteCitation: (token: string, id: string, kind: 'accurate' | 'approve', value: boolean) =>
+    request<{ accurateYes: number; accurateNo: number; approveYes: number; approveNo: number }>(
+      'POST',
+      `/v1/citations/${id}/votes`,
+      { token, body: { kind, value } },
+    ),
+  pendingCitations: (token: string) =>
+    request<{ citations: PendingCitation[] }>('GET', '/v1/moderation/citations', { token }),
+  decideCitation: (token: string, id: string, decision: 'accept' | 'reject', reasonCode: string) =>
+    request<{ status: string }>('POST', `/v1/moderation/citations/${id}/decision`, {
+      token,
+      body: { decision, reasonCode },
+    }),
+  sources: () =>
+    request<{ sources: { domain: string; name: string; tier: number }[]; note: string }>(
+      'GET',
+      '/v1/sources',
+    ),
+  freshness: () => request<Freshness>('GET', '/v1/data-freshness'),
   guides: () => request<{ guides: GuideSummary[] }>('GET', '/v1/guides'),
   guide: (slug: string) => request<Guide>('GET', `/v1/guides/${slug}`),
   search: (token: string | null, q: string) =>
@@ -501,7 +584,16 @@ export function describeError(err: unknown): string {
     post_removed: 'This post was removed by moderators.',
     cannot_follow_self: 'You can’t follow yourself.',
     not_found: 'That could not be found.',
-    already_voted: 'You already cast a mock ballot in this election.',
+    already_voted: 'You already voted on this.',
+    contributors_only:
+      'Only contributors approved for this topic can add citations. Contributors apply with a short essay.',
+    self_citation: 'Leaders can’t cite themselves.',
+    source_not_approved:
+      'That source isn’t on the approved list. Use an official (.gov) source, a court record, AP, Reuters or C-SPAN.',
+    category_not_applicable: 'That topic doesn’t apply to this office.',
+    action_date_in_future: 'The date of the action can’t be in the future.',
+    moderator_only: 'Only moderators can do that.',
+    cannot_decide_own_case: 'You can’t review your own submission.',
     election_closed: 'This election has already happened.',
     already_weighed_in: 'You already weighed in on this bill. Stances can�t be changed.',
     leader_not_in_office: 'This leader is no longer in office.',

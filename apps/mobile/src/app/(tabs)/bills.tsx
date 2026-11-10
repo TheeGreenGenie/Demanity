@@ -76,6 +76,21 @@ export default function BillsScreen() {
   const [topic, setTopic] = useState<string>('all');
   const [topics, setTopics] = useState<Community[]>([]);
   const [showTopics, setShowTopics] = useState(false);
+  const [freshness, setFreshness] = useState<string | null>(null);
+
+  // Data freshness (R23): when real federal bills were last synced.
+  useEffect(() => {
+    civic
+      .freshness()
+      .then((r) => {
+        const c = r.sources.find((s) => s.source === 'congress.gov');
+        if (c?.syncedThrough)
+          setFreshness(
+            `Federal bills from Congress.gov, synced through ${new Date(c.syncedThrough).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}${c.healthy ? '' : ' (last sync failed)'}`,
+          );
+      })
+      .catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     social
@@ -218,7 +233,14 @@ export default function BillsScreen() {
         ) : null}
       </View>
 
-      {deck?.some((b) => b.isSample) ? <SampleBanner what="these bills are made up" /> : null}
+      {freshness ? (
+        <ThemedText type="caption" themeColor="textSecondary">
+          {freshness}
+        </ThemedText>
+      ) : null}
+      {deck?.some((b) => b.isSample) ? (
+        <SampleBanner what="bills marked [Sample] are made up; the others are real" />
+      ) : null}
       <ErrorText message={error} />
 
       {nudge && !member ? (

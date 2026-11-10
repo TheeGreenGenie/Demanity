@@ -84,6 +84,7 @@ export function ScoresTab({ kind, slug }: { kind: 'place' | 'leader'; slug: stri
         items={scores.categories}
         peerLabel={scores.peerLabel}
         subjectKind={scores.subjectKind}
+        leaderSlug={kind === 'leader' ? slug : undefined}
       />
     </View>
   );

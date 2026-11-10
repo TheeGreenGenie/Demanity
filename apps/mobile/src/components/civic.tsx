@@ -4,6 +4,7 @@ import { useEffect, useState, type ComponentProps, type ReactNode } from 'react'
 import { Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { Avatar } from '@/components/avatar';
+import { CitationList } from '@/components/citations';
 import { ThemedText } from '@/components/themed-text';
 import { Brand, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -259,10 +260,13 @@ export function ScoreRow({
   item,
   peerLabel,
   subjectKind,
+  leaderSlug,
 }: {
   item: CategoryScore;
   peerLabel: string;
   subjectKind: string;
+  /** Leaders only: show the citations behind the score, with votes. */
+  leaderSlug?: string | undefined;
 }) {
   const theme = useTheme();
   const [open, setOpen] = useState(false);
@@ -362,6 +366,9 @@ export function ScoreRow({
               once sources are added and reviewed.
             </ThemedText>
           )}
+          {leaderSlug && item.applicable ? (
+            <CitationList leaderSlug={leaderSlug} category={item.category.slug} />
+          ) : null}
         </View>
       ) : null}
     </View>
@@ -379,17 +386,25 @@ export function ScoreList({
   items,
   peerLabel,
   subjectKind,
+  leaderSlug,
 }: {
   items: CategoryScore[];
   peerLabel: string;
   subjectKind: string;
+  leaderSlug?: string | undefined;
 }) {
   const theme = useTheme();
   const [all, setAll] = useState(false);
   const [sort, setSort] = useState<ScoreSort>('high');
   const scored = items.filter((i) => i.score !== null).sort((a, b) => b.score! - a.score!);
   const row = (s: CategoryScore) => (
-    <ScoreRow key={s.category.slug} item={s} peerLabel={peerLabel} subjectKind={subjectKind} />
+    <ScoreRow
+      key={s.category.slug}
+      item={s}
+      peerLabel={peerLabel}
+      subjectKind={subjectKind}
+      leaderSlug={leaderSlug}
+    />
   );
 
   if (!all) {

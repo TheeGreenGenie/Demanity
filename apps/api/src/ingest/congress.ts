@@ -1,4 +1,5 @@
 import type { Pool } from '@demanity/db';
+import { BudgetExhausted, ProviderRateLimited, type ApiBudget } from './budget.js';
 
 /**
  * Congress.gov bill ingestion (R23, R30; docs/LEGISLATION.md).
@@ -55,6 +56,8 @@ export class CongressClient {
   constructor(
     private readonly apiKey: string,
     private readonly fetchFn: typeof fetch = fetch,
+    /** Every request first takes from this budget (ADR 0008). */
+    private readonly budget: ApiBudget | null = null,
   ) {
     if (!apiKey) throw new Error('A Congress.gov (api.data.gov) API key is required');
   }
@@ -63,7 +66,9 @@ export class CongressClient {
     const url = new URL(`${BASE}${path}`);
     for (const [k, v] of Object.entries({ ...params, format: 'json' })) url.searchParams.set(k, v);
     url.searchParams.set('api_key', this.apiKey);
+    await this.budget?.take();
     const res = await this.fetchFn(url.toString());
+    if (res.status === 429) throw new ProviderRateLimited('congress.gov');
     // Never include the URL (it carries the key) in errors or logs.
     if (!res.ok) throw new Error(`Congress.gov ${path} failed: HTTP ${res.status}`);
     return (await res.json()) as T;
@@ -159,6 +164,8 @@ export interface SyncResult {
   bills: number;
   leaders: number;
   through: Date;
+  /** Set when the run stopped because of our budget or a provider 429. */
+  stoppedEarly: string | null;
 }
 
 /**
@@ -168,14 +175,17 @@ export interface SyncResult {
 export async function syncCongressBills(
   pool: Pool,
   client: CongressClient,
-  opts: { now?: Date; since?: Date; maxBills?: number } = {},
+  opts: { now?: Date; since?: Date; maxBills?: number; defaultLookbackDays?: number } = {},
 ): Promise<SyncResult> {
   const now = opts.now ?? new Date();
   const { rows: state } = await pool.query<{ synced_through: Date | null }>(
     'SELECT synced_through FROM sync_state WHERE source = $1',
     [SOURCE],
   );
-  const from = opts.since ?? state[0]?.synced_through ?? new Date(now.getTime() - 7 * 86_400_000);
+  const from =
+    opts.since ??
+    state[0]?.synced_through ??
+    new Date(now.getTime() - (opts.defaultLookbackDays ?? 7) * 86_400_000);
   await pool.query(
     `INSERT INTO sync_state (source, last_run_at) VALUES ($1, now())
      ON CONFLICT (source) DO UPDATE SET last_run_at = now()`,
@@ -199,13 +209,23 @@ export async function syncCongressBills(
   let leaders = 0;
   let complete = false;
   let lastUpdate: string | null = null; // updateDate of the last bill processed (ascending)
+  let stoppedEarly: string | null = null; // budget used up or provider asked us to slow down
   const max = opts.maxBills ?? 2000;
   try {
     for (;;) {
-      const page = await client.listUpdated(from, now, offset);
+      const page = await client.listUpdated(from, now, offset, Math.min(250, max));
       for (const item of page.bills ?? []) {
         if (bills >= max) break;
-        const { bill } = await client.bill(item.congress, item.type, item.number);
+        let bill: CongressBillDetail;
+        try {
+          ({ bill } = await client.bill(item.congress, item.type, item.number));
+        } catch (err) {
+          if (err instanceof BudgetExhausted || err instanceof ProviderRateLimited) {
+            stoppedEarly = err.message;
+            break;
+          }
+          throw err;
+        }
         // Sponsors become leader rows (real people, no scores until citations exist).
         const sponsorIds: string[] = [];
         for (const s of bill.sponsors ?? []) {
@@ -278,7 +298,7 @@ export async function syncCongressBills(
         bills++;
         lastUpdate = item.updateDate;
       }
-      if (bills >= max) break;
+      if (bills >= max || stoppedEarly) break;
       if (!page.pagination?.next || (page.bills ?? []).length === 0) {
         complete = true;
         break;
@@ -295,8 +315,18 @@ export async function syncCongressBills(
       [SOURCE, bills, complete ? now : lastUpdate ? new Date(lastUpdate) : null],
     );
     if (bills > 0) await pool.query('UPDATE data_version SET dirty = true');
-    return { bills, leaders, through: complete ? now : lastUpdate ? new Date(lastUpdate) : from };
+    return {
+      bills,
+      leaders,
+      through: complete ? now : lastUpdate ? new Date(lastUpdate) : from,
+      stoppedEarly,
+    };
   } catch (err) {
+    if (err instanceof BudgetExhausted || err instanceof ProviderRateLimited) {
+      // Stopped before the first page: nothing processed, cursor unchanged.
+      await pool.query('UPDATE sync_state SET items_last_run = 0 WHERE source = $1', [SOURCE]);
+      return { bills: 0, leaders: 0, through: from, stoppedEarly: err.message };
+    }
     await pool.query('UPDATE sync_state SET last_error = $2 WHERE source = $1', [
       SOURCE,
       (err as Error).message.slice(0, 500),
