@@ -2,8 +2,8 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "outDir": "dist",
-    "rootDir": ".",
-    "types": ["node"]
+    "types": ["node"],
+    "rootDir": "../.."
   },
   "include": ["src", "test", "vitest.config.ts", "eslint.config.js"]
 }
