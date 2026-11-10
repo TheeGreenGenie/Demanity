@@ -15,6 +15,7 @@
     "twilio:trial": "pnpm build && node --env-file=../../.env scripts/twilio-trial-check.mjs"
   },
   "dependencies": {
+    "@aws-sdk/client-kms": "^3.1165.0",
     "@demanity/db": "workspace:*",
     "fastify": "^5.12.8"
   },

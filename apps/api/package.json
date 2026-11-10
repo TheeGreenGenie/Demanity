@@ -13,7 +13,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "moderator:grant": "node --env-file=../../.env scripts/grant-moderator.mjs grant",
-    "moderator:revoke": "node --env-file=../../.env scripts/grant-moderator.mjs revoke"
+    "moderator:revoke": "node --env-file=../../.env scripts/grant-moderator.mjs revoke",
+    "seed:dev-moderators": "tsx dev/run-seed-moderators.ts"
   },
   "dependencies": {
     "@demanity/db": "workspace:*",

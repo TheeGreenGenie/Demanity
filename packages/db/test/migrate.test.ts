@@ -1,7 +1,7 @@
 import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createPool, migrate, type Pool } from '../src/index.js';
 import { createTempDatabase } from '../src/testing.js';
 
@@ -9,14 +9,20 @@ let pool: Pool;
 let drop: () => Promise<void>;
 let dir: string;
 
-beforeEach(async () => {
+// One database per file (creating/dropping a database per test is slow under
+// parallel load); each test starts from an empty public schema instead.
+beforeAll(async () => {
   const db = await createTempDatabase();
   drop = db.drop;
   pool = createPool(db.url);
+});
+
+beforeEach(async () => {
+  await pool.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public;');
   dir = await mkdtemp(join(tmpdir(), 'migrations-'));
 });
 
-afterEach(async () => {
+afterAll(async () => {
   await pool?.end();
   await drop?.();
 });

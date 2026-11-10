@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { loadVaultConfig } from '../src/config.js';
+import { AwsKmsKeyProvider } from '../src/crypto/kms.js';
 import { DevConsoleEmailSender, ResendEmailSender } from '../src/providers/email.js';
 import { TwilioVerifyProvider } from '../src/providers/two-factor.js';
 
@@ -44,7 +45,13 @@ describe('vault config', () => {
   it('fails closed in production without real providers and a KMS', () => {
     expect(() => loadVaultConfig({ ...dev(), NODE_ENV: 'production' })).toThrow(/KMS|kms/);
     expect(() =>
-      loadVaultConfig({ ...dev(), NODE_ENV: 'production', VAULT_KEK_PROVIDER: 'kms' }),
+      loadVaultConfig({
+        ...dev(),
+        NODE_ENV: 'production',
+        VAULT_KEK_PROVIDER: 'kms',
+        AWS_REGION: 'us-east-1',
+        VAULT_KMS_KEY_ID: 'alias/demanity-vault',
+      }),
     ).toThrow(/SheerID/);
     // Credentials alone must not let the fake verifier run in production.
     expect(() =>
@@ -52,9 +59,25 @@ describe('vault config', () => {
         ...dev(),
         NODE_ENV: 'production',
         VAULT_KEK_PROVIDER: 'kms',
+        AWS_REGION: 'us-east-1',
+        VAULT_KMS_KEY_ID: 'alias/demanity-vault',
         SHEERID_ACCESS_TOKEN: 'present',
       }),
     ).toThrow(/not yet implemented/);
+  });
+
+  it('uses AWS KMS when VAULT_KEK_PROVIDER=kms', () => {
+    const c = loadVaultConfig({
+      ...dev(),
+      VAULT_KEK_PROVIDER: 'kms',
+      AWS_REGION: 'us-east-1',
+      VAULT_KMS_KEY_ID: 'alias/demanity-vault',
+    });
+    expect(c.keyProvider).toBeInstanceOf(AwsKmsKeyProvider);
+    expect(c.keyProvider.kekId).toBe('aws-kms:alias/demanity-vault');
+    expect(() =>
+      loadVaultConfig({ ...dev(), VAULT_KEK_PROVIDER: 'kms', AWS_REGION: 'us-east-1' }),
+    ).toThrow(/VAULT_KMS_KEY_ID/);
   });
 
   it('requires every secret', () => {

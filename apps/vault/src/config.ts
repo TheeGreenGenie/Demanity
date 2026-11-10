@@ -1,5 +1,7 @@
 import type { Pool } from '@demanity/db';
+import { KMSClient } from '@aws-sdk/client-kms';
 import { LocalKeyProvider, type KeyProvider } from './crypto/envelope.js';
+import { AwsKmsKeyProvider } from './crypto/kms.js';
 import { parseKey, parseKeyring, type Keyring } from './crypto/keys.js';
 import { DevConsoleEmailSender, ResendEmailSender, type EmailSender } from './providers/email.js';
 import { EmailOtpProvider } from './providers/otp.js';
@@ -36,8 +38,19 @@ export function loadVaultConfig(env: NodeJS.ProcessEnv = process.env): VaultConf
 
   // Fail closed: production may never run on development stand-ins.
   if (production && env.VAULT_KEK_PROVIDER !== 'kms') {
-    throw new Error('Production requires VAULT_KEK_PROVIDER=kms (KMS adapter not yet implemented)');
+    throw new Error('Production requires VAULT_KEK_PROVIDER=kms (AWS KMS)');
   }
+
+  // Key-encryption key: AWS KMS in production; a local key only in development.
+  // AWS credentials come from the standard provider chain (e.g. the task's IAM role),
+  // never from this config.
+  const keyProvider: KeyProvider =
+    env.VAULT_KEK_PROVIDER === 'kms'
+      ? new AwsKmsKeyProvider(
+          new KMSClient({ region: required(env, 'AWS_REGION') }),
+          required(env, 'VAULT_KMS_KEY_ID'),
+        )
+      : new LocalKeyProvider(parseKey(env.VAULT_LOCAL_KEK, 'VAULT_LOCAL_KEK'));
   if (production) {
     // The SheerID adapter does not exist yet; until it does, production must not start,
     // even if SheerID credentials are present (otherwise the fake verifier would run).
@@ -71,7 +84,7 @@ export function loadVaultConfig(env: NodeJS.ProcessEnv = process.env): VaultConf
     serviceToken: required(env, 'VAULT_SERVICE_TOKEN'),
     tokenKeys: parseKeyring(env.VAULT_TOKEN_KEYS, 'VAULT_TOKEN_KEYS'),
     lookupKey: parseKey(env.VAULT_LOOKUP_KEY, 'VAULT_LOOKUP_KEY'),
-    keyProvider: new LocalKeyProvider(parseKey(env.VAULT_LOCAL_KEK, 'VAULT_LOCAL_KEK')),
+    keyProvider,
     verifier: new FakeVerifier(), // replaced by the SheerID adapter once access is granted
     emailSender,
     sms,

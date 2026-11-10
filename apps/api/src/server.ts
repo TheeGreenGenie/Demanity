@@ -5,6 +5,7 @@ import { Redis } from 'ioredis';
 import { buildApp, loggerOptions } from './app.js';
 import { RedisChallengeStore } from './auth/challenges.js';
 import { loadConfig, loadServiceConfig } from './config.js';
+import { assertNoDevSeedData } from './dev-seed-guard.js';
 import { deleteStalePendingAccounts } from './moderation/service.js';
 import { HttpVaultClient } from './vault-client.js';
 
@@ -13,6 +14,7 @@ const svc = loadServiceConfig();
 
 const pool = createPool(svc.databaseUrl);
 await migrate(pool, join(dirname(fileURLToPath(import.meta.url)), '..', 'migrations'));
+if (config.nodeEnv === 'production') await assertNoDevSeedData(pool);
 
 // Settings recommended for rate limiting: fail fast instead of queueing.
 const redis = new Redis(svc.redisUrl, { connectTimeout: 2000, maxRetriesPerRequest: 1 });
