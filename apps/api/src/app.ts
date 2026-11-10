@@ -76,8 +76,9 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     await app.register(cors, {
       origin: rp.origins,
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
-      allowedHeaders: ['authorization', 'content-type'],
-      credentials: false,
+      // Credentials carry the web app's HttpOnly session cookie (auth/web-session.ts).
+      allowedHeaders: ['authorization', 'content-type', 'x-demanity-client'],
+      credentials: true,
       maxAge: 600,
     });
     await app.register(rateLimit, {

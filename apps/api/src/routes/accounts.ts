@@ -6,6 +6,7 @@ import type { Pool } from '@demanity/db';
 import { requireSession } from '../auth/guard.js';
 import { PasskeyError, type Passkeys } from '../auth/passkeys.js';
 import { createSession, deleteSession } from '../auth/sessions.js';
+import { clearSessionCookie, deliverToken } from '../auth/web-session.js';
 import { ROUTE_LIMITS, type RouteLimits } from '../rate-limit.js';
 import {
   VaultClientError,
@@ -74,7 +75,9 @@ export async function accountRoutes(app: FastifyInstance, deps: AccountRouteDeps
           [username, randomBytes(32)],
         );
         const token = await createSession(pool, rows[0]!.id, 'onboarding');
-        return reply.code(201).send({ token, status: 'pending' });
+        return reply
+          .code(201)
+          .send({ token: deliverToken(req, reply, token, 'onboarding'), status: 'pending' });
       } catch (err) {
         if ((err as { code?: string }).code === '23505') {
           return reply.code(409).send({ error: 'username_taken' });
@@ -257,7 +260,7 @@ export async function accountRoutes(app: FastifyInstance, deps: AccountRouteDeps
         // prompt instead of "create, then sign in again"). The old session ends.
         if (req.sessionToken) await deleteSession(pool, req.sessionToken);
         const token = await createSession(pool, req.session!.accountId, 'full');
-        return reply.code(201).send({ ...result, token });
+        return reply.code(201).send({ ...result, token: deliverToken(req, reply, token, 'full') });
       } catch (err) {
         return sendPasskeyError(reply, err);
       }
@@ -290,7 +293,8 @@ export async function accountRoutes(app: FastifyInstance, deps: AccountRouteDeps
       };
       try {
         const accountId = await passkeys.authenticate(challengeId, response);
-        return { token: await createSession(pool, accountId, 'full') };
+        const token = await createSession(pool, accountId, 'full');
+        return { token: deliverToken(req, reply, token, 'full') };
       } catch (err) {
         return sendPasskeyError(reply, err);
       }
@@ -299,6 +303,7 @@ export async function accountRoutes(app: FastifyInstance, deps: AccountRouteDeps
 
   app.post('/v1/auth/logout', async (req, reply) => {
     if (req.sessionToken) await deleteSession(pool, req.sessionToken);
+    clearSessionCookie(req, reply);
     return reply.code(204).send();
   });
 
@@ -361,7 +366,8 @@ export async function accountRoutes(app: FastifyInstance, deps: AccountRouteDeps
         ? await vault.checkTwoFactor(accountId, ch, code).catch(() => false)
         : false;
       if (!ok || !accountId) return reply.code(400).send({ error: 'invalid_code' });
-      return { token: await createSession(pool, accountId, 'recovery') };
+      const token = await createSession(pool, accountId, 'recovery');
+      return { token: deliverToken(req, reply, token, 'recovery') };
     },
   );
 }

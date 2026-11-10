@@ -25,7 +25,9 @@ describe('CORS', () => {
     const res = await preflight(RP.origins[0]!);
     expect(res.headers['access-control-allow-origin']).toBe(RP.origins[0]);
     expect(String(res.headers['access-control-allow-headers'])).toMatch(/authorization/);
-    expect(res.headers['access-control-allow-credentials']).toBeUndefined();
+    // Credentials are allowed (for the web app's HttpOnly session cookie), but only
+    // for the app's own origins; see the disallowed-origin case below.
+    expect(res.headers['access-control-allow-credentials']).toBe('true');
   });
 
   it('allows PATCH (used to update leader request status)', async () => {

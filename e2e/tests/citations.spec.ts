@@ -14,7 +14,8 @@ import { startStack, type Stack } from './stack.js';
  */
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
-const API = process.env.EXPO_PUBLIC_API_URL ?? 'http://127.0.0.1:3000';
+// Same site as the web app, so its HttpOnly session cookie is sent.
+const API = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000';
 
 let stack: Stack;
 test.beforeAll(async () => {
@@ -41,18 +42,17 @@ function grantModerator(username: string) {
   );
 }
 
-/** Calls the API as the signed-in user of `page` (token from the web session store). */
+/**
+ * Calls the API as the signed-in user of `page`. Runs in the browser, so the
+ * HttpOnly session cookie is sent the same way the web app sends it.
+ */
 async function apiAs(page: Page, method: string, path: string, body?: unknown) {
   return page.evaluate(
     async ({ api, method, path, body }) => {
-      // Runs in the browser (this package has no DOM types, hence the narrow cast).
-      const store = (
-        globalThis as unknown as { sessionStorage: { getItem(k: string): string | null } }
-      ).sessionStorage;
-      const token = store.getItem('demanity.session');
       const init: RequestInit = {
         method,
-        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        credentials: 'include',
+        headers: { 'x-demanity-client': 'web', 'content-type': 'application/json' },
       };
       if (body !== undefined) init.body = JSON.stringify(body);
       const res = await fetch(`${api}${path}`, init);

@@ -1,6 +1,7 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { Pool } from '@demanity/db';
 import { findSession, type Session, type SessionScope } from './sessions.js';
+import { COOKIE_SESSION, cookieToken } from './web-session.js';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -15,12 +16,14 @@ declare module 'fastify' {
  */
 export function bearerToken(req: FastifyRequest): string | null {
   const h = req.headers.authorization;
-  return h?.startsWith('Bearer ') ? h.slice(7) : null;
+  const t = h?.startsWith('Bearer ') ? h.slice(7) : null;
+  return t && t !== COOKIE_SESSION ? t : null;
 }
 
 export function loadSession(pool: Pool) {
   return async (req: FastifyRequest) => {
-    const token = bearerToken(req);
+    // Native apps send a bearer token; the web app sends an HttpOnly cookie.
+    const token = bearerToken(req) ?? cookieToken(req);
     req.sessionToken = token;
     req.session = token ? await findSession(pool, token) : null;
   };

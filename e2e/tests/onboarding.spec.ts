@@ -48,7 +48,9 @@ test('a second account for the same person is refused in the UI', async ({ page 
     [2, 'already has a Demanity account'],
   ] as const) {
     await page.goto('/');
-    await page.evaluate(() => sessionStorage.clear());
+    // Sign out: drop the HttpOnly session cookie and the app's signed-in marker.
+    await page.context().clearCookies();
+    await page.evaluate(() => localStorage.clear());
     await page.goto('/join');
     await page.getByLabel('Username').fill(`e2e_dup_${i}_${randomBytes(2).toString('hex')}`);
     await page.getByRole('button', { name: 'Continue' }).click();

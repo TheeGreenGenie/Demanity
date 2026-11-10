@@ -2,7 +2,15 @@
  * Typed client for the Demanity API. Only the API URL comes from the bundle
  * (EXPO_PUBLIC_ values are public by design); no secrets live in the app.
  */
-const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://127.0.0.1:3000';
+import { Platform } from 'react-native';
+
+// The web app uses an HttpOnly session cookie (apps/api/src/auth/web-session.ts),
+// so in development it calls the API on the same site as the page (localhost).
+const WEB = Platform.OS === 'web';
+const API_URL =
+  process.env.EXPO_PUBLIC_API_URL ?? (WEB ? 'http://localhost:3000' : 'http://127.0.0.1:3000');
+/** On web, the "token" the app holds is this marker; the real one is in the cookie. */
+export const COOKIE_SESSION = 'cookie';
 
 export class ApiError extends Error {
   constructor(
@@ -41,10 +49,14 @@ async function request<T>(
   const res = await fetch(`${API_URL}${path}`, {
     method,
     headers: {
-      ...(opts.token ? { authorization: `Bearer ${opts.token}` } : {}),
+      ...(opts.token && opts.token !== COOKIE_SESSION
+        ? { authorization: `Bearer ${opts.token}` }
+        : {}),
+      ...(WEB ? { 'x-demanity-client': 'web' } : {}),
       ...(opts.body === undefined ? {} : { 'content-type': 'application/json' }),
     },
     ...(opts.body === undefined ? {} : { body: JSON.stringify(opts.body) }),
+    ...(WEB ? { credentials: 'include' as const } : {}),
   });
   const text = await res.text();
   const json = text ? (JSON.parse(text) as Record<string, unknown>) : {};

@@ -12,6 +12,7 @@
 | Poll ballots | Ballot store | **Not linked to any account** ([ADR 0005](adr/0005-unlinkable-ballots.md)) |
 | Demographic attributes (age bracket, state) | Only inside the user's anonymous credential on their device | The server keeps no per-user demographic record, so this data can never be sold or leaked. |
 | Volunteered location | Activity DB | County level or coarser, optional |
+| Web session | Browser | An HttpOnly cookie that page scripts can't read (`SameSite=Strict`, `Secure` in production). Native apps keep their session in the OS keychain. |
 | IP addresses | Rate limiter | Hashed and kept for 24 hours or less. No analytics SDKs, no tracking cookies. |
 
 **Never stored:** names, dates of birth, ID documents, SheerID payloads, behavioral ad profiles.
