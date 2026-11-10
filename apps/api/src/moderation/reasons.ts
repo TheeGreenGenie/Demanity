@@ -70,6 +70,8 @@ export const REASON_CODES = {
   },
   // Leader stances (with an approved source).
   stance: ['stance_documented'],
+  // Organization page (R22).
+  org: ['org_proposal', 'org_response'],
   recovery: {
     approve: ['ownership_plausible'],
     deny: ['ownership_not_established', 'suspected_takeover'],

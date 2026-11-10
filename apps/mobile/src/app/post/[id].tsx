@@ -6,6 +6,7 @@ import { Avatar } from '@/components/avatar';
 import { Button, ErrorText, Field } from '@/components/form';
 import { ActionPill, CommunityIcon, ThreadedComments, VotePill } from '@/components/forum';
 import { AppealBox, ContextNotes, ModeratorPanel } from '@/components/moderation-tools';
+import { PollCard, RepostButton } from '@/components/community-v2';
 import { Screen } from '@/components/screen';
 import { timeAgo } from '@/components/social';
 import { ThemedText } from '@/components/themed-text';
@@ -120,6 +121,7 @@ export default function PostScreen() {
           <>
             <ThemedText style={styles.body}>{post.body}</ThemedText>
             <ContextNotes targetType="post" targetId={post.id} version={version} />
+            <PollCard postId={post.id} />
             <View style={styles.actions}>
               <VotePill
                 kind={post.community.kind}
@@ -133,6 +135,7 @@ export default function PostScreen() {
                 label={String(comments.length)}
                 accessibilityLabel={`Comments (${comments.length})`}
               />
+              <RepostButton targetType="post" targetId={post.id} />
               {post.author ? (
                 <ActionPill
                   icon="person-outline"

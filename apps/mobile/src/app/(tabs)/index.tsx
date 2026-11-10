@@ -5,6 +5,7 @@ import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { Avatar } from '@/components/avatar';
 import { BillCard } from '@/components/civic';
+import { RepostCard } from '@/components/community-v2';
 import { Button, ErrorText } from '@/components/form';
 import { Screen } from '@/components/screen';
 import { communityColor, Pill, PillRow, PostCard } from '@/components/social';
@@ -12,7 +13,15 @@ import { ThemedText } from '@/components/themed-text';
 import { Brand, Radius, Spacing } from '@/constants/theme';
 import { usePagedPosts } from '@/hooks/use-paged-posts';
 import { useTheme } from '@/hooks/use-theme';
-import { social, type Bill, type Community, type FollowedItem, type Post } from '@/lib/api';
+import {
+  community,
+  social,
+  type Bill,
+  type Community,
+  type FollowedItem,
+  type Post,
+  type Repost,
+} from '@/lib/api';
 import { isFullyOnboarded, useAuth } from '@/lib/auth';
 
 export default function HomeScreen() {
@@ -47,6 +56,14 @@ function MemberHome() {
   const { token } = useAuth();
   const feed = usePagedPosts((cursor) => social.feed(token!, cursor), `feed:${token}`);
   const pills = useCommunityPills(token);
+  const [reposts, setReposts] = useState<Repost[]>([]);
+  useEffect(() => {
+    if (!token) return;
+    community
+      .feedReposts(token)
+      .then((r) => setReposts(r.reposts))
+      .catch(() => undefined);
+  }, [token]);
 
   return (
     <Screen flush fab={{ label: 'Write a post', onPress: () => router.push('/compose') }}>
@@ -62,13 +79,26 @@ function MemberHome() {
         ))}
       </PillRow>
       <View style={[styles.feedHeader, { borderBottomColor: theme.backgroundSelected }]}>
-        <ThemedText type="headline">Your feed</ThemedText>
+        <View style={styles.feedTitleRow}>
+          <ThemedText type="headline" style={styles.flexOne}>
+            Your feed
+          </ThemedText>
+          <Button
+            title="Customize"
+            size="small"
+            variant="ghost"
+            onPress={() => router.push('/feed-settings')}
+          />
+        </View>
         <ThemedText type="caption" themeColor="textSecondary">
           Newest first · only what you follow · no hidden ranking
         </ThemedText>
       </View>
       <ErrorText message={feed.error} />
       <FollowingRow items={feed.first?.following ?? []} />
+      {reposts.map((r) => (
+        <RepostCard key={r.id} repost={r} />
+      ))}
       {mergeFeed(feed.posts, feed.first?.updates ?? []).map((item) =>
         item.kind === 'post' ? (
           <PostCard key={item.post.id} post={item.post} />
@@ -274,6 +304,8 @@ function GuestHome() {
 }
 
 const styles = StyleSheet.create({
+  feedTitleRow: { flexDirection: 'row', alignItems: 'center' },
+  flexOne: { flex: 1 },
   followingWrap: { borderBottomWidth: StyleSheet.hairlineWidth, paddingVertical: Spacing.two },
   followingTitle: { paddingHorizontal: Spacing.three, fontWeight: 900, letterSpacing: 0.5 },
   followingRow: { paddingHorizontal: Spacing.three, gap: Spacing.three, paddingTop: Spacing.two },

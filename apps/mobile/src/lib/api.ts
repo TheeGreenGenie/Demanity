@@ -568,6 +568,57 @@ export interface CompareSide {
   stances: Record<string, Stance>;
 }
 
+export interface Poll {
+  id: string;
+  question: string;
+  closesAt: string;
+  closed: boolean;
+  voted: boolean;
+  total: number | null;
+  options: { id: string; label: string; votes: number | null }[];
+  label: string;
+}
+
+export interface Repost {
+  id: string;
+  by: string;
+  targetType: 'post' | 'bill' | 'leader';
+  comment: string;
+  createdAt: string;
+  reason: string;
+  target: Record<string, unknown>;
+}
+
+export interface FeedPrefs {
+  mutedCommunities: string[];
+  mutedAccounts: string[];
+  includeUpdates: boolean;
+  includeReposts: boolean;
+  sort: 'new' | 'top_day';
+  recipe: string;
+}
+
+export interface Digest {
+  from: string;
+  to: string;
+  bills: Bill[];
+  stories: { id: string; title: string; username: string | null; kudos: number }[];
+  note: string;
+}
+
+export interface OrgProposal {
+  id: string;
+  title: string;
+  body: string;
+  status: 'open' | 'responded' | 'closed';
+  response: string | null;
+  respondedAt: string | null;
+  createdAt: string;
+  voted: boolean;
+  tally: { support: number; oppose: number } | null;
+  responseRequired: boolean;
+}
+
 export type FollowKind = 'community' | 'user' | 'leader' | 'place' | 'bill';
 
 export interface FollowedItem {
@@ -644,6 +695,45 @@ export const moderation = {
     id: string,
     body: { status: 'done' | 'removed' | 'merged'; reasonCode: string; mergeInto?: string },
   ) => request<{ status: string }>('PATCH', `/v1/leader-requests/${id}`, { token, body }),
+};
+
+export const community = {
+  poll: (token: string | null, postId: string) =>
+    request<Poll>('GET', `/v1/posts/${postId}/poll`, { token }),
+  addPoll: (token: string, postId: string, question: string, options: string[], days = 7) =>
+    request<{ id: string }>('POST', `/v1/posts/${postId}/poll`, {
+      token,
+      body: { question, options, days },
+    }),
+  votePoll: (token: string, pollId: string, optionId: string) =>
+    request<{ status: string }>('POST', `/v1/polls/${pollId}/vote`, { token, body: { optionId } }),
+  repost: (token: string, targetType: 'post' | 'bill' | 'leader', targetId: string, comment = '') =>
+    request<void>('PUT', '/v1/reposts', { token, body: { targetType, targetId, comment } }),
+  unrepost: (token: string, targetType: 'post' | 'bill' | 'leader', targetId: string) =>
+    request<void>('DELETE', '/v1/reposts', { token, body: { targetType, targetId } }),
+  feedReposts: (token: string) =>
+    request<{ reposts: Repost[] }>('GET', '/v1/feed/reposts', { token }),
+  feedPrefs: (token: string) => request<FeedPrefs>('GET', '/v1/me/feed-prefs', { token }),
+  saveFeedPrefs: (token: string, body: Partial<Omit<FeedPrefs, 'recipe'>> & { recipe?: string }) =>
+    request<FeedPrefs>('PUT', '/v1/me/feed-prefs', { token, body }),
+  digest: () => request<Digest>('GET', '/v1/digest/common-ground'),
+  orgProposals: (token: string | null) =>
+    request<{ threshold: number; proposals: OrgProposal[] }>('GET', '/v1/org/proposals', { token }),
+  voteOrg: (token: string, id: string, stance: 'support' | 'oppose') =>
+    request<{ status: string }>('POST', `/v1/org/proposals/${id}/vote`, {
+      token,
+      body: { stance },
+    }),
+  postOrg: (token: string, title: string, body: string) =>
+    request<{ id: string }>('POST', '/v1/moderation/org/proposals', {
+      token,
+      body: { title, body },
+    }),
+  respondOrg: (token: string, id: string, response: string) =>
+    request<{ status: string }>('POST', `/v1/moderation/org/proposals/${id}/respond`, {
+      token,
+      body: { response },
+    }),
 };
 
 export const leaders = {
@@ -895,6 +985,9 @@ export function describeError(err: unknown): string {
     cannot_follow_self: 'You can’t follow yourself.',
     not_found: 'That could not be found.',
     already_voted: 'You already voted on this.',
+    poll_closed: 'This poll has closed.',
+    poll_exists: 'This post already has a poll.',
+    invalid_recipe: 'That recipe code isn’t valid.',
     pick_two_different_leaders: 'Pick two different leaders to compare.',
     source_required: 'Missing items need a link to an official source.',
     slow_mode: 'This thread is busy. To keep it readable, you can comment once every 2 minutes.',

@@ -5,13 +5,13 @@ import { Pressable, StyleSheet, View } from 'react-native';
 
 import { BillCard, Section, Tabs } from '@/components/civic';
 import { CommunityPosts } from '@/components/community-feed';
-import { ErrorText } from '@/components/form';
+import { Button, ErrorText } from '@/components/form';
 import { Empty } from '@/components/place-sections';
 import { Screen } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
 import { Brand, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { civic, describeError, type Bill, type GuideSummary } from '@/lib/api';
+import { civic, community, describeError, type Digest, type GuideSummary } from '@/lib/api';
 import { isFullyOnboarded, useAuth } from '@/lib/auth';
 
 type Tab = 'stories' | 'learn' | 'common';
@@ -122,23 +122,41 @@ function Learn() {
 }
 
 function CommonGround() {
-  const { token } = useAuth();
-  const [bills, setBills] = useState<Bill[] | null>(null);
+  const router = useRouter();
+  const [digest, setDigest] = useState<Digest | null>(null);
   useEffect(() => {
-    civic
-      .bills(token, { bipartisan: true })
-      .then((r) => setBills(r.bills))
-      .catch(() => setBills([]));
-  }, [token]);
+    community
+      .digest()
+      .then(setDigest)
+      .catch(() => undefined);
+  }, []);
+  if (!digest) return null;
   return (
     <View>
       <Section
-        title="Working together"
-        caption="Bills sponsored by members of more than one party"
+        title="This week’s Common Ground"
+        caption={`${digest.from} to ${digest.to} · ${digest.note}`}
       />
-      {bills && bills.length === 0 ? <Empty text="No cross-party bills yet." /> : null}
-      {(bills ?? []).map((b) => (
+      <Section
+        title="Working together"
+        caption="Bills sponsored across party lines, with action this week"
+      />
+      {digest.bills.length === 0 ? <Empty text="No cross-party bill activity this week." /> : null}
+      {digest.bills.map((b) => (
         <BillCard key={b.id} bill={b} />
+      ))}
+      <Section
+        title="Most appreciated stories"
+        caption="Humanity posts with the most kudos this week"
+      />
+      {digest.stories.length === 0 ? <Empty text="No stories this week yet." /> : null}
+      {digest.stories.map((s) => (
+        <Button
+          key={s.id}
+          title={`${s.title} · ${s.kudos} kudos`}
+          variant="ghost"
+          onPress={() => router.push({ pathname: '/post/[id]', params: { id: s.id } })}
+        />
       ))}
     </View>
   );

@@ -42,6 +42,7 @@ function RootStack() {
       <Stack.Screen name="orders" options={{ title: '' }} />
       <Stack.Screen name="ideas" options={{ title: '' }} />
       <Stack.Screen name="compare" options={{ title: 'Compare' }} />
+      <Stack.Screen name="org" options={{ title: '' }} />
       {/* Onboarding needs a session; writing needs a finished sign-up. */}
       <Stack.Protected guard={!ready || token !== null}>
         <Stack.Screen name="onboarding" options={{ title: '' }} />
@@ -51,6 +52,7 @@ function RootStack() {
         <Stack.Screen name="cite" options={{ title: '', presentation: 'modal' }} />
         <Stack.Screen name="moderation" options={{ title: 'Moderation' }} />
         <Stack.Screen name="contribute" options={{ title: '' }} />
+        <Stack.Screen name="feed-settings" options={{ title: '' }} />
         <Stack.Screen name="claim" options={{ title: '', presentation: 'modal' }} />
       </Stack.Protected>
     </Stack>

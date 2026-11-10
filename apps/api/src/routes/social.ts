@@ -395,6 +395,11 @@ export async function socialRoutes(
     const cursor = (req.query as { cursor?: string }).cursor;
     const page = await queries.feed(pool, me, cursor);
     if (cursor) return page;
+    const { rows: pref } = await pool.query<{ include_updates: boolean }>(
+      'SELECT include_updates FROM feed_prefs WHERE account_id = $1',
+      [me],
+    );
+    const includeUpdates = pref[0]?.include_updates ?? true;
     const [updates, following] = await Promise.all([
       pool.query<BillRow>(
         `SELECT * FROM (${billSelect(`, ${RELEVANCE_SQL} AS reason`)}
@@ -418,7 +423,11 @@ export async function socialRoutes(
         [me],
       ),
     ]);
-    return { ...page, updates: updates.rows.map(billView), following: following.rows };
+    return {
+      ...page,
+      updates: includeUpdates ? updates.rows.map(billView) : [],
+      following: following.rows,
+    };
   });
 
   app.get(

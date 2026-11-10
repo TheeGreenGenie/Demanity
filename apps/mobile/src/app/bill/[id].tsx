@@ -17,6 +17,7 @@ import {
 import { Button, ErrorText } from '@/components/form';
 import { ContextNotes, ModeratorPanel } from '@/components/moderation-tools';
 import { BillDiscussion, BillTimeline } from '@/components/bill-sections';
+import { RepostButton } from '@/components/community-v2';
 import { Screen } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
 import { Brand, Radius, Spacing } from '@/constants/theme';
@@ -182,6 +183,9 @@ export default function BillScreen() {
         <ErrorText message={error} />
       </View>
 
+      <View style={{ paddingHorizontal: 16 }}>
+        <RepostButton targetType="bill" targetId={bill.id} />
+      </View>
       <BillTimeline billId={bill.id} />
       <Section title="Sponsors">
         {bill.sponsors.map((s) => (

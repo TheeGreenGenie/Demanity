@@ -179,31 +179,62 @@ export const queries = {
    * first, each labelled with why it is shown. With no follows, it shows
    * recent posts from across Demanity and says so.
    */
+  /**
+   * Default feed (R16): posts from followed communities and people, with the
+   * member's own preferences applied (feed builder): muted communities and
+   * people are left out, and the sort is either newest first or the most
+   * upvoted in the last day. Every item says why it is shown.
+   */
   async feed(pool: Pool, viewerId: string, cursor?: string) {
+    const { rows: prefRows } = await pool.query<{
+      muted_communities: string[];
+      muted_accounts: string[];
+      sort: 'new' | 'top_day';
+    }>('SELECT muted_communities, muted_accounts, sort FROM feed_prefs WHERE account_id = $1', [
+      viewerId,
+    ]);
+    const prefs = prefRows[0] ?? {
+      muted_communities: [],
+      muted_accounts: [],
+      sort: 'new' as const,
+    };
+    const mutes = `NOT (c.slug = ANY($2::text[])) AND (a.username IS NULL OR NOT (a.username = ANY($3::text[])))`;
+    const muteParams = [prefs.muted_communities, prefs.muted_accounts];
+
     const { rows: n } = await pool.query<{ n: number }>(
       'SELECT count(*)::int AS n FROM follows WHERE follower_id = $1',
       [viewerId],
     );
-    if ((n[0]?.n ?? 0) === 0) {
-      const result = await listPosts(pool, viewerId, 'TRUE', [], cursor);
+    const followsNothing = (n[0]?.n ?? 0) === 0;
+    const followed = `(EXISTS (SELECT 1 FROM follows f WHERE f.follower_id = $1 AND f.target_type = 'community' AND f.target_id = p.community_id)
+        OR EXISTS (SELECT 1 FROM follows f WHERE f.follower_id = $1 AND f.target_type = 'account' AND f.target_id = p.author_id))`;
+    const where = `${followsNothing ? 'TRUE' : followed} AND ${mutes}`;
+
+    if (prefs.sort === 'top_day') {
+      const result = await rankedPosts(
+        pool,
+        viewerId,
+        `${where} AND p.created_at > now() - interval '1 day'`,
+        muteParams,
+        'top',
+        cursor,
+      );
       return {
         posts: result.posts.map((p) => ({
           ...p,
-          reason: 'Recent across Demanity (you follow nothing yet)',
+          reason: followsNothing
+            ? 'Most upvoted today across Demanity'
+            : 'Most upvoted today in what you follow (your feed setting)',
         })),
         next: result.next,
       };
     }
-    const result = await listPosts(
-      pool,
-      viewerId,
-      `(EXISTS (SELECT 1 FROM follows f WHERE f.follower_id = $1 AND f.target_type = 'community' AND f.target_id = p.community_id)
-        OR EXISTS (SELECT 1 FROM follows f WHERE f.follower_id = $1 AND f.target_type = 'account' AND f.target_id = p.author_id))`,
-      [],
-      cursor,
-    );
+
+    const result = await listPosts(pool, viewerId, where, muteParams, cursor);
     return {
       posts: result.posts.map((p, i) => {
+        if (followsNothing)
+          return { ...p, reason: 'Recent across Demanity (you follow nothing yet)' };
         const row = result.rows[i]!;
         const reason = row.followed_community
           ? `You follow ${p.community.name}`

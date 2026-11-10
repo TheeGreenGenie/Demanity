@@ -9,7 +9,7 @@ import { communityColor } from '@/components/social';
 import { ThemedText } from '@/components/themed-text';
 import { Brand, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { describeError, social, type Community } from '@/lib/api';
+import { community, describeError, social, type Community } from '@/lib/api';
 import { isFullyOnboarded, useAuth } from '@/lib/auth';
 
 export default function ComposeScreen() {
@@ -24,6 +24,9 @@ export default function ComposeScreen() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [attempted, setAttempted] = useState(false);
+  const [withPoll, setWithPoll] = useState(false);
+  const [question, setQuestion] = useState('');
+  const [options, setOptions] = useState(['', '']);
 
   useEffect(() => {
     social
@@ -41,16 +44,27 @@ export default function ComposeScreen() {
     community: slug === '' ? 'Pick a community for your post.' : undefined,
     title: title.trim().length < 3 ? 'Give your post a title (at least 3 characters).' : undefined,
     body: body.trim().length < 1 ? 'Write something for your post.' : undefined,
+    poll:
+      withPoll && (question.trim().length < 5 || options.filter((o) => o.trim()).length < 2)
+        ? 'A poll needs a question (5+ characters) and at least 2 options.'
+        : undefined,
   };
   const shown = attempted ? problems : { community: undefined, title: undefined, body: undefined };
 
   async function submit() {
     setAttempted(true);
-    if (problems.community || problems.title || problems.body) return;
+    if (problems.community || problems.title || problems.body || problems.poll) return;
     setBusy(true);
     setError(null);
     try {
       const post = await social.createPost(token!, slug, title.trim(), body.trim());
+      if (withPoll)
+        await community.addPoll(
+          token!,
+          post.id,
+          question.trim(),
+          options.map((o) => o.trim()).filter(Boolean),
+        );
       router.replace({ pathname: '/post/[id]', params: { id: post.id } });
     } catch (err) {
       setError(describeError(err));
@@ -117,6 +131,43 @@ export default function ComposeScreen() {
         </ThemedText>
       </View>
       <ErrorText message={error} />
+      <Button
+        title={withPoll ? 'Remove poll' : 'Add a poll'}
+        variant="ghost"
+        size="small"
+        onPress={() => setWithPoll((w) => !w)}
+      />
+      {withPoll ? (
+        <View style={{ gap: 8 }}>
+          <Field
+            label="Poll question"
+            value={question}
+            onChangeText={setQuestion}
+            maxLength={300}
+          />
+          {options.map((o, i) => (
+            <Field
+              key={i}
+              label={`Option ${i + 1}`}
+              value={o}
+              onChangeText={(v) => setOptions((list) => list.map((x, j) => (j === i ? v : x)))}
+              maxLength={120}
+            />
+          ))}
+          {options.length < 6 ? (
+            <Button
+              title="Add option"
+              variant="ghost"
+              size="small"
+              onPress={() => setOptions((list) => [...list, ''])}
+            />
+          ) : null}
+          {attempted && problems.poll ? <ErrorText message={problems.poll} /> : null}
+          <ThemedText type="caption" themeColor="textSecondary">
+            Votes are private and results show after voting. Polls close in 7 days.
+          </ThemedText>
+        </View>
+      ) : null}
       <Button title="Post" onPress={submit} busy={busy} />
     </Screen>
   );
