@@ -20,7 +20,8 @@
     "db:down": "docker compose -f infra/docker-compose.yml down",
     "check:dco": "node scripts/check-dco.mjs",
     "e2e": "pnpm --filter @demanity/e2e e2e",
-    "e2e:all": "pnpm db:up && pnpm build && pnpm --filter @demanity/mobile exec expo export --platform web && pnpm e2e"
+    "e2e:all": "pnpm db:up && pnpm build && pnpm --filter @demanity/mobile exec expo export --platform web && pnpm e2e",
+    "demo": "pnpm db:up && pnpm build && pnpm --filter @demanity/api seed:dev-moderators && pnpm --filter @demanity/mobile exec expo export --platform web && node scripts/demo.mjs"
   },
   "devDependencies": {
     "prettier": "^3.9.10",

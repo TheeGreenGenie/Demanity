@@ -13,7 +13,7 @@ export async function assertNoDevSeedData(pool: Pool): Promise<void> {
   if (n > 0) {
     throw new Error(
       `Refusing to start in production: ${n} development seed account(s) exist. ` +
-        'Delete them (DELETE FROM accounts WHERE id IN (SELECT account_id FROM dev_seed_accounts)) ' +
+        'Delete their posts and comments, then the accounts (see the pre-launch checklist), ' +
         'or use a fresh production database.',
     );
   }

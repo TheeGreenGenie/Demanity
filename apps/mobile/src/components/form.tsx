@@ -8,11 +8,8 @@ import {
 } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
-import { Spacing } from '@/constants/theme';
+import { Brand, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-
-const PRIMARY = '#3c87f7';
-const DANGER = '#d64545';
 
 export function Field({
   label,
@@ -69,7 +66,7 @@ export function Button({
       style={({ pressed }) => [
         styles.button,
         variant === 'primary'
-          ? { backgroundColor: PRIMARY }
+          ? { backgroundColor: Brand.primary }
           : {
               backgroundColor: theme.backgroundElement,
               borderColor: theme.backgroundSelected,
@@ -79,7 +76,7 @@ export function Button({
       ]}
     >
       {busy ? (
-        <ActivityIndicator color={variant === 'primary' ? '#fff' : theme.text} />
+        <ActivityIndicator color={variant === 'primary' ? Brand.onPrimary : theme.text} />
       ) : (
         <ThemedText type="smallBold" style={variant === 'primary' ? styles.primaryText : undefined}>
           {title}
@@ -102,18 +99,18 @@ const styles = StyleSheet.create({
   field: { gap: Spacing.one },
   input: {
     borderWidth: 1,
-    borderRadius: 10,
+    borderRadius: Radius.small,
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.two + 2,
     fontSize: 16,
   },
   button: {
-    borderRadius: 10,
+    borderRadius: Radius.small,
     paddingVertical: Spacing.three,
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: 48,
   },
-  primaryText: { color: '#fff' },
-  error: { color: DANGER },
+  primaryText: { color: Brand.onPrimary },
+  error: { color: Brand.danger },
 });

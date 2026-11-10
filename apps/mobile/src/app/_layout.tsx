@@ -4,18 +4,23 @@ import { useColorScheme } from 'react-native';
 import { AuthProvider, isFullyOnboarded, useAuth } from '@/lib/auth';
 
 function RootStack() {
-  const { token, me } = useAuth();
+  // Until the stored session has been checked, guards must not redirect, or a
+  // deep link to a protected screen (e.g. /compose) bounces a signed-in user.
+  const { ready, token, me } = useAuth();
   return (
-    <Stack screenOptions={{ title: 'Demanity' }}>
-      <Stack.Screen name="index" options={{ title: 'Demanity' }} />
+    <Stack>
+      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="join" options={{ title: 'Join Demanity' }} />
       <Stack.Screen name="sign-in" options={{ title: 'Sign in' }} />
-      {/* Onboarding needs a session; the account screen needs a finished sign-up. */}
-      <Stack.Protected guard={token !== null}>
+      <Stack.Screen name="c/[slug]" options={{ title: 'Community' }} />
+      <Stack.Screen name="post/[id]" options={{ title: 'Post' }} />
+      <Stack.Screen name="u/[username]" options={{ title: 'Profile' }} />
+      {/* Onboarding needs a session; writing needs a finished sign-up. */}
+      <Stack.Protected guard={!ready || token !== null}>
         <Stack.Screen name="onboarding" options={{ title: 'Finish signing up' }} />
       </Stack.Protected>
-      <Stack.Protected guard={isFullyOnboarded(me)}>
-        <Stack.Screen name="account" options={{ title: 'Your account' }} />
+      <Stack.Protected guard={!ready || isFullyOnboarded(me)}>
+        <Stack.Screen name="compose" options={{ title: 'New post', presentation: 'modal' }} />
       </Stack.Protected>
     </Stack>
   );

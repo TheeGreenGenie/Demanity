@@ -1,6 +1,12 @@
 /**
- * Below are the colors that are used in the app. The colors are defined in the light and dark mode.
- * There are many other ways to style your app. For example, [Nativewind](https://www.nativewind.dev/), [Tamagui](https://tamagui.dev/), [unistyles](https://unistyl.es/), etc.
+ * DEMANITY DESIGN TOKENS — the single place to customize the look and feel.
+ *
+ * Every screen and component reads colors, spacing, corner radius and fonts
+ * from here, so changing a value below restyles the whole app (iOS, Android
+ * and web). Light and dark modes each have their own palette.
+ *
+ * The current values are deliberately plain placeholders, ready for the real
+ * brand design.
  */
 
 import '@/global.css';
@@ -25,6 +31,25 @@ export const Colors = {
 } as const;
 
 export type ThemeColor = keyof typeof Colors.light & keyof typeof Colors.dark;
+
+/** Brand and meaning colors (same in light and dark mode unless you split them). */
+export const Brand = {
+  primary: '#3c87f7', // main buttons, links, active tab
+  onPrimary: '#ffffff', // text on primary buttons
+  danger: '#d64545', // errors, destructive actions
+  like: '#2f9e61',
+  dislike: '#c2552d',
+  kudos: '#d4a017', // Humanity's only reaction
+  humanity: '#e9a23b', // accent for the Humanity section
+} as const;
+
+/** Corner radius scale. */
+export const Radius = {
+  small: 8,
+  medium: 12,
+  large: 16,
+  pill: 999,
+} as const;
 
 export const Fonts = Platform.select({
   ios: {

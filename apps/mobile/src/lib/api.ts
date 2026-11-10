@@ -50,6 +50,92 @@ async function request<T>(
   return json as T;
 }
 
+export type CommunityKind = 'topic' | 'location' | 'humanity';
+export type ReactionKind = 'like' | 'dislike' | 'kudos';
+
+export interface Community {
+  slug: string;
+  name: string;
+  kind: CommunityKind;
+  description: string;
+  followers: number;
+  following: boolean;
+}
+
+export interface Post {
+  id: string;
+  community: { slug: string; name: string; kind: CommunityKind };
+  author: { username: string } | null;
+  title: string;
+  body: string | null;
+  status: 'visible' | 'removed';
+  removedReason: string | null;
+  createdAt: string;
+  counts: { like: number; dislike: number; kudos: number; comments: number };
+  myReaction: ReactionKind | null;
+  reason?: string;
+}
+
+export interface Comment {
+  id: string;
+  parentId: string | null;
+  author: { username: string } | null;
+  body: string | null;
+  status: 'visible' | 'removed';
+  createdAt: string;
+  likes: number;
+  dislikes: number;
+  kudos: number;
+  myReaction: ReactionKind | null;
+}
+
+export interface Page<T> {
+  next: string | null;
+  posts: T[];
+}
+
+export interface Profile extends Page<Post> {
+  username: string;
+  joined: string;
+  followers: number;
+  following: boolean;
+}
+
+const q = (cursor?: string | null) => (cursor ? `?cursor=${encodeURIComponent(cursor)}` : '');
+
+export const social = {
+  communities: (token: string | null, kind?: CommunityKind) =>
+    request<{ communities: Community[] }>('GET', `/v1/communities${kind ? `?kind=${kind}` : ''}`, {
+      token,
+    }),
+  community: (token: string | null, slug: string) =>
+    request<Community>('GET', `/v1/communities/${slug}`, { token }),
+  communityPosts: (token: string | null, slug: string, cursor?: string | null) =>
+    request<Page<Post>>('GET', `/v1/communities/${slug}/posts${q(cursor)}`, { token }),
+  feed: (token: string, cursor?: string | null) =>
+    request<Page<Post>>('GET', `/v1/feed${q(cursor)}`, { token }),
+  post: (token: string | null, id: string) => request<Post>('GET', `/v1/posts/${id}`, { token }),
+  comments: (token: string | null, id: string) =>
+    request<{ comments: Comment[] }>('GET', `/v1/posts/${id}/comments`, { token }),
+  createPost: (token: string, slug: string, title: string, body: string) =>
+    request<Post>('POST', `/v1/communities/${slug}/posts`, { token, body: { title, body } }),
+  createComment: (token: string, postId: string, body: string, parentId?: string) =>
+    request<Comment>('POST', `/v1/posts/${postId}/comments`, {
+      token,
+      body: parentId ? { body, parentId } : { body },
+    }),
+  react: (token: string, targetType: 'post' | 'comment', targetId: string, kind: ReactionKind) =>
+    request<void>('PUT', '/v1/reactions', { token, body: { targetType, targetId, kind } }),
+  unreact: (token: string, targetType: 'post' | 'comment', targetId: string) =>
+    request<void>('DELETE', '/v1/reactions', { token, body: { targetType, targetId } }),
+  follow: (token: string, kind: 'community' | 'user', name: string) =>
+    request<void>('PUT', `/v1/follows/${kind}/${name}`, { token }),
+  unfollow: (token: string, kind: 'community' | 'user', name: string) =>
+    request<void>('DELETE', `/v1/follows/${kind}/${name}`, { token }),
+  user: (token: string | null, username: string) =>
+    request<Profile>('GET', `/v1/users/${username}`, { token }),
+};
+
 export const api = {
   signUp: (username: string) =>
     request<{ token: string; status: AccountStatus }>('POST', '/v1/accounts', {
@@ -99,6 +185,10 @@ export function describeError(err: unknown): string {
     unknown_credential: 'This passkey is not registered with Demanity.',
     verification_failed: 'Passkey verification failed. Please try again.',
     sign_in_required: 'Please sign in first.',
+    reaction_not_allowed_here: 'That reaction isn’t available here.',
+    post_removed: 'This post was removed by moderators.',
+    cannot_follow_self: 'You can’t follow yourself.',
+    not_found: 'That could not be found.',
   };
   if (err.status === 429) return 'Too many attempts. Please wait a little and try again.';
   return messages[err.code] ?? 'Something went wrong. Please try again.';

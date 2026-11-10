@@ -8,6 +8,7 @@ import { createPool, migrate } from '@demanity/db';
 import { buildTwoFactor, loadVaultConfig } from '../../vault/src/config.js';
 import { VaultService } from '../../vault/src/service.js';
 import { seedDevModerators } from './seed-moderators.js';
+import { seedSampleContent } from './seed-sample-content.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const envFile = join(here, '..', '..', '..', '.env');
@@ -44,12 +45,18 @@ try {
   });
 
   const seeded = await seedDevModerators({ apiPool, vaultPool, vault });
+  const samples = await seedSampleContent(apiPool);
   console.log('\nDevelopment moderator accounts (NEVER use in production):\n');
   for (const m of seeded) {
     console.log(`  ${m.username} (${m.created ? 'created' : 'already existed, new token issued'})`);
     console.log(`    Authorization: Bearer ${m.token}`);
   }
   console.log(`\nTokens are full sessions valid for ${seeded[0]?.expiresInDays ?? 30} days.`);
+  console.log(
+    samples.skipped
+      ? 'Sample posts already present.'
+      : `Added ${samples.created} [Sample] posts for UI work.`,
+  );
   console.log('Production refuses to start while these accounts exist.\n');
 } finally {
   await apiPool.end();
