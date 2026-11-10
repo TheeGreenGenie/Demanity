@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -8,30 +9,42 @@ import {
 } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
-import { Brand, Radius, Spacing } from '@/constants/theme';
+import { Brand, Radius, Spacing, Type } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
+/** Filled text input with a label, hint, inline error and an accent focus ring. */
 export function Field({
   label,
   hint,
   error,
+  onFocus,
+  onBlur,
   ...input
 }: TextInputProps & { label: string; hint?: string; error?: string | undefined }) {
   const theme = useTheme();
+  const [focused, setFocused] = useState(false);
+  const border = error ? Brand.danger : focused ? Brand.primary : theme.backgroundSelected;
   return (
     <View style={styles.field}>
-      <ThemedText type="smallBold">{label}</ThemedText>
+      <ThemedText type="smallBold" themeColor="textSecondary">
+        {label}
+      </ThemedText>
       <TextInput
         accessibilityLabel={label}
         accessibilityHint={error ?? hint}
         placeholderTextColor={theme.textSecondary}
+        onFocus={(e) => {
+          setFocused(true);
+          onFocus?.(e);
+        }}
+        onBlur={(e) => {
+          setFocused(false);
+          onBlur?.(e);
+        }}
         style={[
           styles.input,
-          {
-            color: theme.text,
-            borderColor: error ? Brand.danger : theme.backgroundSelected,
-            backgroundColor: theme.background,
-          },
+          input.multiline && styles.multiline,
+          { color: theme.text, borderColor: border, backgroundColor: theme.backgroundElement },
         ]}
         {...input}
       />
@@ -40,7 +53,7 @@ export function Field({
           {error}
         </ThemedText>
       ) : hint ? (
-        <ThemedText type="small" themeColor="textSecondary">
+        <ThemedText type="caption" themeColor="textSecondary">
           {hint}
         </ThemedText>
       ) : null}
@@ -48,18 +61,21 @@ export function Field({
   );
 }
 
+/** Pill button. primary = solid accent, secondary = outline, ghost = text only. */
 export function Button({
   title,
   onPress,
   busy = false,
   disabled = false,
   variant = 'primary',
+  size = 'large',
 }: {
   title: string;
   onPress: () => void;
   busy?: boolean;
   disabled?: boolean;
-  variant?: 'primary' | 'secondary';
+  variant?: 'primary' | 'secondary' | 'ghost';
+  size?: 'large' | 'small';
 }) {
   const theme = useTheme();
   const inactive = busy || disabled;
@@ -71,20 +87,32 @@ export function Button({
       onPress={onPress}
       style={({ pressed }) => [
         styles.button,
-        variant === 'primary'
-          ? { backgroundColor: Brand.primary }
-          : {
-              backgroundColor: theme.backgroundElement,
-              borderColor: theme.backgroundSelected,
-              borderWidth: 1,
-            },
-        (pressed || inactive) && { opacity: 0.6 },
+        size === 'small' && styles.small,
+        variant === 'primary' && {
+          backgroundColor: pressed ? Brand.primaryPressed : Brand.primary,
+        },
+        variant === 'secondary' && {
+          borderWidth: 1,
+          borderColor: theme.backgroundSelected,
+          backgroundColor: pressed ? theme.backgroundElement : 'transparent',
+        },
+        variant === 'ghost' && {
+          backgroundColor: pressed ? theme.backgroundElement : 'transparent',
+        },
+        inactive && { opacity: 0.5 },
       ]}
     >
       {busy ? (
         <ActivityIndicator color={variant === 'primary' ? Brand.onPrimary : theme.text} />
       ) : (
-        <ThemedText type="smallBold" style={variant === 'primary' ? styles.primaryText : undefined}>
+        <ThemedText
+          type="smallBold"
+          style={[
+            size === 'large' && styles.largeLabel,
+            variant === 'primary' && { color: Brand.onPrimary },
+            variant === 'ghost' && { color: Brand.primary },
+          ]}
+        >
           {title}
         </ThemedText>
       )}
@@ -102,21 +130,24 @@ export function ErrorText({ message }: { message: string | null }) {
 }
 
 const styles = StyleSheet.create({
-  field: { gap: Spacing.one },
+  field: { gap: Spacing.one + 2 },
   input: {
-    borderWidth: 1,
-    borderRadius: Radius.small,
+    borderWidth: 1.5,
+    borderRadius: Radius.medium,
     paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two + 2,
-    fontSize: 16,
+    paddingVertical: Spacing.three - 2,
+    fontSize: Type.default.fontSize,
   },
+  multiline: { minHeight: 120, textAlignVertical: 'top' },
   button: {
-    borderRadius: Radius.small,
-    paddingVertical: Spacing.three,
+    borderRadius: Radius.pill,
+    paddingVertical: Spacing.three - 2,
+    paddingHorizontal: Spacing.four,
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 48,
+    minHeight: 50,
   },
-  primaryText: { color: Brand.onPrimary },
-  error: { color: Brand.danger },
+  small: { minHeight: 34, paddingVertical: Spacing.one + 2, paddingHorizontal: Spacing.three },
+  largeLabel: { fontSize: 16, fontWeight: 800 },
+  error: { color: Brand.danger, fontWeight: 600 },
 });

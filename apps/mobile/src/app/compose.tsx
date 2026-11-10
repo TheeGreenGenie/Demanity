@@ -2,8 +2,10 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
+import { Avatar } from '@/components/avatar';
 import { Button, ErrorText, Field } from '@/components/form';
 import { Screen } from '@/components/screen';
+import { communityColor } from '@/components/social';
 import { ThemedText } from '@/components/themed-text';
 import { Brand, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -21,6 +23,7 @@ export default function ComposeScreen() {
   const [body, setBody] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [attempted, setAttempted] = useState(false);
 
   useEffect(() => {
     social
@@ -33,9 +36,17 @@ export default function ComposeScreen() {
     if (ready && !isFullyOnboarded(me)) router.replace('/join');
   }, [ready, me, router]);
 
-  const valid = slug !== '' && title.trim().length >= 3 && body.trim().length >= 1;
+  // Never a silently disabled button: problems are named next to their field.
+  const problems = {
+    community: slug === '' ? 'Pick a community for your post.' : undefined,
+    title: title.trim().length < 3 ? 'Give your post a title (at least 3 characters).' : undefined,
+    body: body.trim().length < 1 ? 'Write something for your post.' : undefined,
+  };
+  const shown = attempted ? problems : { community: undefined, title: undefined, body: undefined };
 
   async function submit() {
+    setAttempted(true);
+    if (problems.community || problems.title || problems.body) return;
     setBusy(true);
     setError(null);
     try {
@@ -49,54 +60,82 @@ export default function ComposeScreen() {
   }
 
   return (
-    <Screen title="New post">
-      <ThemedText type="smallBold">Community</ThemedText>
+    <Screen>
+      <View style={styles.who}>
+        <Avatar name={me?.username ?? null} size={36} />
+        <ThemedText type="smallBold">{me?.username}</ThemedText>
+      </View>
+
+      <ThemedText type="smallBold" themeColor="textSecondary">
+        Post to
+      </ThemedText>
       <View style={styles.chips}>
         {communities.map((c) => {
           const active = c.slug === slug;
+          const color = communityColor(c.kind);
           return (
             <Pressable
               key={c.slug}
               accessibilityRole="radio"
+              accessibilityLabel={c.name}
               accessibilityState={{ selected: active }}
               onPress={() => setSlug(c.slug)}
               style={[
                 styles.chip,
-                { borderColor: active ? Brand.primary : theme.backgroundSelected },
-                active && { backgroundColor: Brand.primary },
+                { borderColor: active ? color : theme.backgroundSelected },
+                active && { backgroundColor: color },
               ]}
             >
-              <ThemedText type="small" style={active ? { color: Brand.onPrimary } : undefined}>
+              <ThemedText type="caption" style={[styles.chipText, active && { color: '#fff' }]}>
                 {c.name}
               </ThemedText>
             </Pressable>
           );
         })}
       </View>
-      <Field label="Title" value={title} onChangeText={setTitle} maxLength={200} />
+      {shown.community ? <ErrorText message={shown.community} /> : null}
+
+      <Field
+        label="Title"
+        value={title}
+        onChangeText={setTitle}
+        maxLength={200}
+        error={shown.title}
+      />
       <Field
         label="What's on your mind?"
         value={body}
         onChangeText={setBody}
         multiline
         maxLength={20000}
+        error={shown.body}
       />
-      <ThemedText type="small" themeColor="textSecondary">
-        Be civil. Factual claims should cite a source. Clear misinformation, hate and harassment are
-        removed, and every removal is listed in the public moderation log.
-      </ThemedText>
+      <View style={[styles.note, { backgroundColor: theme.backgroundElement }]}>
+        <ThemedText type="caption" themeColor="textSecondary">
+          Be civil. Factual claims should cite a source. Clear misinformation, hate and harassment
+          are removed, and every removal is listed in the public moderation log.
+        </ThemedText>
+      </View>
       <ErrorText message={error} />
-      <Button title="Post" onPress={submit} busy={busy} disabled={!valid} />
+      <Button title="Post" onPress={submit} busy={busy} />
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  who: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
   chip: {
     borderWidth: 1,
     borderRadius: Radius.pill,
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.one,
+    paddingHorizontal: Spacing.three - 4,
+    paddingVertical: Spacing.one + 2,
+  },
+  chipText: { fontWeight: 700 },
+  note: {
+    borderRadius: Radius.medium,
+    padding: Spacing.three - 4,
+    borderLeftWidth: 3,
+    borderLeftColor: Brand.primary,
   },
 });

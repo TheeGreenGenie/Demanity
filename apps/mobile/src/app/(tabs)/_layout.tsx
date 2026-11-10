@@ -3,46 +3,85 @@ import { Tabs } from 'expo-router';
 import type { ComponentProps } from 'react';
 import type { ColorValue } from 'react-native';
 
-import { Brand } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
 
-type IconProps = ComponentProps<typeof Ionicons>;
+type IconName = ComponentProps<typeof Ionicons>['name'];
 
-function TabIcon({
-  name,
+function TabIcon({ name, color, size }: { name: IconName; color: ColorValue; size: number }) {
+  // React Navigation's ColorValue and the icon library's color type describe the same values.
+  return (
+    <Ionicons
+      name={name}
+      color={color as ComponentProps<typeof Ionicons>['color']}
+      size={size + 2}
+    />
+  );
+}
+
+/** Filled icon when the tab is active, outline otherwise. */
+function StateIcon({
+  focused,
+  outline,
+  filled,
   color,
   size,
 }: {
-  name: IconProps['name'];
+  focused: boolean;
+  outline: IconName;
+  filled: IconName;
   color: ColorValue;
   size: number;
 }) {
-  // React Navigation's ColorValue and the icon library's color type describe the same values.
-  return <Ionicons name={name} color={color as IconProps['color']} size={size} />;
+  return <TabIcon name={focused ? filled : outline} color={color} size={size} />;
 }
 
 export default function TabLayout() {
+  const theme = useTheme();
   return (
-    <Tabs screenOptions={{ tabBarActiveTintColor: Brand.primary }}>
+    <Tabs
+      screenOptions={{
+        tabBarActiveTintColor: theme.text,
+        tabBarInactiveTintColor: theme.textSecondary,
+        tabBarShowLabel: false, // icon-only bar; titles remain for screen readers
+        tabBarStyle: {
+          backgroundColor: theme.background,
+          borderTopColor: theme.backgroundSelected,
+        },
+        headerStyle: { backgroundColor: theme.background },
+        headerShadowVisible: false,
+        headerTitleStyle: { fontWeight: '900', fontSize: 20 },
+        headerTintColor: theme.text,
+      }}
+    >
       <Tabs.Screen
         name="index"
-        options={{ title: 'Home', tabBarIcon: (p) => <TabIcon name="home-outline" {...p} /> }}
+        options={{
+          title: 'Home',
+          headerTitle: 'Demanity',
+          tabBarIcon: (p) => <StateIcon {...p} outline="home-outline" filled="home" />,
+        }}
       />
       <Tabs.Screen
         name="communities"
         options={{
           title: 'Communities',
-          tabBarIcon: (p) => <TabIcon name="people-outline" {...p} />,
+          tabBarIcon: (p) => <StateIcon {...p} outline="compass-outline" filled="compass" />,
         }}
       />
       <Tabs.Screen
         name="humanity"
-        options={{ title: 'Humanity', tabBarIcon: (p) => <TabIcon name="heart-outline" {...p} /> }}
+        options={{
+          title: 'Humanity',
+          tabBarIcon: (p) => <StateIcon {...p} outline="heart-outline" filled="heart" />,
+        }}
       />
       <Tabs.Screen
         name="account"
         options={{
           title: 'Account',
-          tabBarIcon: (p) => <TabIcon name="person-circle-outline" {...p} />,
+          tabBarIcon: (p) => (
+            <StateIcon {...p} outline="person-circle-outline" filled="person-circle" />
+          ),
         }}
       />
     </Tabs>

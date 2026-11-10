@@ -3,6 +3,7 @@ import { useState } from 'react';
 
 import { Button, ErrorText, Field } from '@/components/form';
 import { Screen } from '@/components/screen';
+import { SignUpSteps } from '@/components/steps';
 import { ThemedText } from '@/components/themed-text';
 import { api, ApiError, describeError, type IdentityForm } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -96,6 +97,7 @@ function IdentityStep() {
       title="Verify your identity"
       subtitle="Demanity is for people 18 and over with a US driver’s license. Your details go to our verification partner to confirm them, and are never stored by Demanity."
     >
+      <SignUpSteps current={1} />
       <Field
         label="First name"
         value={form.firstName}
@@ -183,6 +185,7 @@ function EmailStep() {
       title="Confirm your email"
       subtitle="Used only to send you security codes, for example if you lose your phone. It is stored encrypted and never shown to anyone."
     >
+      <SignUpSteps current={2} />
       <Field
         label="Email"
         value={email}
@@ -242,6 +245,7 @@ function PasskeyStep() {
       title="Create your passkey"
       subtitle="A passkey replaces passwords. It stays on your device, unlocked with your fingerprint, face or device PIN, and it’s what lets you vote."
     >
+      <SignUpSteps current={3} />
       {supported ? (
         <Button title="Create passkey" onPress={register} busy={busy} />
       ) : (

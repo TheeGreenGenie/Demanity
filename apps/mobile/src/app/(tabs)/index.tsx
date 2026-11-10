@@ -1,14 +1,16 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
-import { StyleSheet } from 'react-native';
+import { useEffect, useState } from 'react';
+import { StyleSheet, View } from 'react-native';
 
 import { Button, ErrorText } from '@/components/form';
 import { Screen } from '@/components/screen';
-import { PostCard } from '@/components/social';
+import { communityColor, Pill, PillRow, PostCard } from '@/components/social';
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Radius, Spacing } from '@/constants/theme';
+import { Brand, Radius, Spacing } from '@/constants/theme';
 import { usePagedPosts } from '@/hooks/use-paged-posts';
-import { social } from '@/lib/api';
+import { useTheme } from '@/hooks/use-theme';
+import { social, type Community } from '@/lib/api';
 import { isFullyOnboarded, useAuth } from '@/lib/auth';
 
 export default function HomeScreen() {
@@ -17,45 +19,116 @@ export default function HomeScreen() {
   return isFullyOnboarded(me) ? <MemberHome /> : <GuestHome />;
 }
 
+/** Community pills at the top of the feed: followed ones first. */
+function useCommunityPills(token: string | null) {
+  const [communities, setCommunities] = useState<Community[]>([]);
+  useEffect(() => {
+    social
+      .communities(token)
+      .then((r) =>
+        setCommunities(
+          [...r.communities].sort((a, b) => Number(b.following) - Number(a.following)).slice(0, 14),
+        ),
+      )
+      .catch(() => undefined);
+  }, [token]);
+  return communities;
+}
+
 /** Members: their feed. Chronological, built only from what they follow; each item says why it's there. */
 function MemberHome() {
   const router = useRouter();
+  const theme = useTheme();
   const { token } = useAuth();
   const feed = usePagedPosts((cursor) => social.feed(token!, cursor), `feed:${token}`);
+  const pills = useCommunityPills(token);
 
   return (
-    <Screen
-      title="Your feed"
-      subtitle="Newest first, from the communities and people you follow. No hidden ranking."
-    >
-      <Button title="Write a post" onPress={() => router.push('/compose')} />
+    <Screen flush fab={{ label: 'Write a post', onPress: () => router.push('/compose') }}>
+      <PillRow>
+        {pills.map((c) => (
+          <Pill
+            key={c.slug}
+            label={c.name}
+            color={communityColor(c.kind)}
+            selected={c.following}
+            onPress={() => router.push({ pathname: '/c/[slug]', params: { slug: c.slug } })}
+          />
+        ))}
+      </PillRow>
+      <View style={[styles.feedHeader, { borderBottomColor: theme.backgroundSelected }]}>
+        <ThemedText type="headline">Your feed</ThemedText>
+        <ThemedText type="caption" themeColor="textSecondary">
+          Newest first · only what you follow · no hidden ranking
+        </ThemedText>
+      </View>
       <ErrorText message={feed.error} />
       {feed.posts.map((p) => (
         <PostCard key={p.id} post={p} />
       ))}
       {!feed.loading && feed.posts.length === 0 ? (
-        <ThemedText themeColor="textSecondary">
-          Nothing here yet. Follow some communities to fill your feed.
-        </ThemedText>
+        <View style={styles.empty}>
+          <ThemedText themeColor="textSecondary">
+            Nothing here yet. Follow some communities to fill your feed.
+          </ThemedText>
+        </View>
       ) : null}
       {feed.hasMore ? (
-        <Button title="Load more" variant="secondary" onPress={feed.loadMore} busy={feed.loading} />
+        <View style={styles.more}>
+          <Button
+            title="Load more"
+            variant="secondary"
+            onPress={feed.loadMore}
+            busy={feed.loading}
+          />
+        </View>
       ) : null}
     </Screen>
   );
 }
 
-const PILLARS = [
-  { title: 'Legislation', body: 'Every new federal and state bill, order, regulation and ruling.' },
-  { title: 'Leaders', body: 'Trust pages that hold leaders to their own stated positions.' },
-  { title: 'Polls', body: 'One verified person, one unlinkable vote.' },
-  { title: 'Forums', body: 'Discuss issues by topic, location and bill.' },
-  { title: 'Humanity', body: 'The good people do for each other, and the ways we are alike.' },
-] as const;
+const PILLARS: {
+  title: string;
+  body: string;
+  icon: 'document-text' | 'shield-checkmark' | 'checkbox' | 'chatbubbles' | 'heart';
+  color: string;
+}[] = [
+  {
+    title: 'Legislation',
+    body: 'Every new federal and state bill, order, regulation and ruling.',
+    icon: 'document-text',
+    color: Brand.location,
+  },
+  {
+    title: 'Leaders',
+    body: 'Trust pages that hold leaders to their own stated positions.',
+    icon: 'shield-checkmark',
+    color: Brand.primary,
+  },
+  {
+    title: 'Polls',
+    body: 'One verified person, one unlinkable vote.',
+    icon: 'checkbox',
+    color: Brand.like,
+  },
+  {
+    title: 'Forums',
+    body: 'Discuss issues by topic, location and bill.',
+    icon: 'chatbubbles',
+    color: '#EC4899',
+  },
+  {
+    title: 'Humanity',
+    body: 'The good people do for each other, and the ways we are alike.',
+    icon: 'heart',
+    color: Brand.humanity,
+  },
+];
 
-/** Guests: what Demanity is, how to join, and a taste of Humanity. */
+/** Guests: a bold hero, how to join, what's inside, and a taste of Humanity. */
 function GuestHome() {
   const router = useRouter();
+  const theme = useTheme();
   const { token } = useAuth();
   const humanity = usePagedPosts(
     (cursor) => social.communityPosts(null, 'humanity', cursor),
@@ -63,30 +136,56 @@ function GuestHome() {
   );
 
   return (
-    <Screen>
-      <ThemedText type="title">Demanity</ThemedText>
-      <ThemedText themeColor="textSecondary">Democracy + Humanity</ThemedText>
-      {token ? (
-        <Button title="Continue signing up" onPress={() => router.push('/onboarding')} />
-      ) : (
-        <ThemedView style={styles.actions}>
-          <Button title="Join Demanity" onPress={() => router.push('/join')} />
-          <Button title="Sign in" variant="secondary" onPress={() => router.push('/sign-in')} />
-        </ThemedView>
-      )}
-      {PILLARS.map((pillar) => (
-        <ThemedView key={pillar.title} type="backgroundElement" style={styles.card}>
-          <ThemedText type="smallBold">{pillar.title}</ThemedText>
-          <ThemedText>{pillar.body}</ThemedText>
-        </ThemedView>
-      ))}
+    <Screen flush>
+      <View style={styles.hero}>
+        <ThemedText type="caption" style={styles.eyebrow}>
+          DEMANITY
+        </ThemedText>
+        <ThemedText type="title">
+          Democracy + Humanity
+          <ThemedText type="title" style={{ color: Brand.primary }}>
+            .
+          </ThemedText>
+        </ThemedText>
+        <ThemedText themeColor="textSecondary" style={styles.lede}>
+          Track what government actually does, hold leaders to their word, and talk it through with
+          real, verified people. One person, one account.
+        </ThemedText>
+        <View style={styles.cta}>
+          {token ? (
+            <Button title="Continue signing up" onPress={() => router.push('/onboarding')} />
+          ) : (
+            <>
+              <Button title="Join Demanity" onPress={() => router.push('/join')} />
+              <Button title="Sign in" variant="secondary" onPress={() => router.push('/sign-in')} />
+            </>
+          )}
+        </View>
+      </View>
+
+      <View style={styles.grid}>
+        {PILLARS.map((p) => (
+          <View key={p.title} style={[styles.tile, { backgroundColor: theme.backgroundElement }]}>
+            <View style={[styles.tileIcon, { backgroundColor: p.color }]}>
+              <Ionicons name={p.icon} size={18} color="#fff" />
+            </View>
+            <ThemedText type="headline">{p.title}</ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              {p.body}
+            </ThemedText>
+          </View>
+        ))}
+      </View>
+
       {humanity.posts.length > 0 ? (
-        <ThemedText type="smallBold">Recently in Humanity</ThemedText>
+        <View style={[styles.feedHeader, { borderBottomColor: theme.backgroundSelected }]}>
+          <ThemedText type="headline">Recently in Humanity</ThemedText>
+        </View>
       ) : null}
       {humanity.posts.slice(0, 3).map((p) => (
         <PostCard key={p.id} post={p} />
       ))}
-      <ThemedText type="small" themeColor="textSecondary">
+      <ThemedText type="caption" themeColor="textSecondary" style={styles.footnote}>
         Pre-release build. Browsing as a guest: nothing about you is tracked.
       </ThemedText>
     </Screen>
@@ -94,6 +193,43 @@ function GuestHome() {
 }
 
 const styles = StyleSheet.create({
-  actions: { gap: Spacing.two },
-  card: { gap: Spacing.two, padding: Spacing.three, borderRadius: Radius.medium },
+  feedHeader: {
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.three - 4,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: 2,
+  },
+  empty: { padding: Spacing.four },
+  more: { padding: Spacing.three },
+  hero: {
+    paddingHorizontal: Spacing.three,
+    paddingTop: Spacing.five,
+    paddingBottom: Spacing.four,
+    gap: Spacing.three,
+  },
+  eyebrow: { color: Brand.primary, fontWeight: 900, letterSpacing: 3 },
+  lede: { fontSize: 18, lineHeight: 26 },
+  cta: { gap: Spacing.two, marginTop: Spacing.two },
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.two,
+    paddingHorizontal: Spacing.three,
+    paddingBottom: Spacing.four,
+  },
+  tile: {
+    flexBasis: '47%',
+    flexGrow: 1,
+    borderRadius: Radius.large,
+    padding: Spacing.three,
+    gap: Spacing.two,
+  },
+  tileIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  footnote: { padding: Spacing.three },
 });

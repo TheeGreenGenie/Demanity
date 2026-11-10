@@ -1,9 +1,12 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
+import { StyleSheet, View } from 'react-native';
 
 import { Button, ErrorText } from '@/components/form';
 import { Screen } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
+import { Brand, Spacing } from '@/constants/theme';
 import { api, ApiError, describeError } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import {
@@ -35,7 +38,13 @@ export default function SignInScreen() {
   }
 
   return (
-    <Screen title="Sign in" subtitle="Use the passkey saved on this device. No password needed.">
+    <Screen
+      title="Welcome back"
+      subtitle="Use the passkey saved on this device: your fingerprint, face or device PIN. No password needed."
+    >
+      <View style={styles.badge}>
+        <Ionicons name="finger-print" size={56} color={Brand.primary} />
+      </View>
       {passkeysSupported() ? (
         <Button title="Sign in with passkey" onPress={signIn} busy={busy} />
       ) : (
@@ -50,3 +59,7 @@ export default function SignInScreen() {
     </Screen>
   );
 }
+
+const styles = StyleSheet.create({
+  badge: { alignItems: 'center', paddingVertical: Spacing.four },
+});

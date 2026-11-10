@@ -2,17 +2,22 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
+import { Avatar } from '@/components/avatar';
 import { Button, ErrorText, Field } from '@/components/form';
+import { ActionPill, CommunityIcon, ThreadedComments, VotePill } from '@/components/forum';
 import { Screen } from '@/components/screen';
-import { CommentThread, ReactionBar, timeAgo } from '@/components/social';
+import { timeAgo } from '@/components/social';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
 import { describeError, social, type Comment, type Post } from '@/lib/api';
 import { isFullyOnboarded, useAuth } from '@/lib/auth';
 
+/** A post and its discussion, in the forum style: full post, then threaded comments. */
 export default function PostScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const theme = useTheme();
   const { token, me } = useAuth();
   const [post, setPost] = useState<Post | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
@@ -47,6 +52,7 @@ export default function PostScreen() {
   }, [token, id]);
 
   async function send() {
+    if (!draft.trim()) return;
     setBusy(true);
     setError(null);
     try {
@@ -69,76 +75,83 @@ export default function PostScreen() {
     );
   }
   const removed = post.status === 'removed';
+  const member = isFullyOnboarded(me);
 
   return (
-    <Screen>
-      <Pressable
-        accessibilityRole="link"
-        onPress={() =>
-          router.push({ pathname: '/c/[slug]', params: { slug: post.community.slug } })
-        }
-      >
-        <ThemedText type="small" themeColor="textSecondary">
-          {post.community.name}
+    <Screen flush>
+      <View style={[styles.post, { borderBottomColor: theme.backgroundSelected }]}>
+        <Pressable
+          accessibilityRole="link"
+          onPress={() =>
+            router.push({ pathname: '/c/[slug]', params: { slug: post.community.slug } })
+          }
+          style={styles.meta}
+        >
+          <CommunityIcon kind={post.community.kind} size={32} />
+          <View>
+            <ThemedText type="smallBold">{post.community.name}</ThemedText>
+            <ThemedText type="caption" themeColor="textSecondary">
+              {post.author ? `u/${post.author.username}` : 'deleted'} · {timeAgo(post.createdAt)}
+            </ThemedText>
+          </View>
+        </Pressable>
+        <ThemedText type="subtitle" style={styles.title}>
+          {post.title}
         </ThemedText>
-      </Pressable>
-      <ThemedText type="subtitle">{post.title}</ThemedText>
-      <View style={styles.meta}>
-        {post.author ? (
-          <Pressable
-            accessibilityRole="link"
-            onPress={() =>
-              router.push({
-                pathname: '/u/[username]',
-                params: { username: post.author!.username },
-              })
-            }
-          >
-            <ThemedText type="small">@{post.author.username}</ThemedText>
-          </Pressable>
+        {removed ? (
+          <ThemedText themeColor="textSecondary">
+            Removed by moderators ({post.removedReason?.replace(/_/g, ' ')}). See the public
+            moderation log for details.
+          </ThemedText>
         ) : (
-          <ThemedText type="small">deleted account</ThemedText>
+          <>
+            <ThemedText style={styles.body}>{post.body}</ThemedText>
+            <View style={styles.actions}>
+              <VotePill
+                kind={post.community.kind}
+                targetType="post"
+                targetId={post.id}
+                counts={post.counts}
+                mine={post.myReaction}
+              />
+              <ActionPill
+                icon="chatbubble-outline"
+                label={String(comments.length)}
+                accessibilityLabel={`Comments (${comments.length})`}
+              />
+              {post.author ? (
+                <ActionPill
+                  icon="person-outline"
+                  label="Profile"
+                  onPress={() =>
+                    router.push({
+                      pathname: '/u/[username]',
+                      params: { username: post.author!.username },
+                    })
+                  }
+                />
+              ) : null}
+            </View>
+          </>
         )}
-        <ThemedText type="small" themeColor="textSecondary">
-          · {timeAgo(post.createdAt)}
-        </ThemedText>
       </View>
-      {removed ? (
-        <ThemedText themeColor="textSecondary">
-          Removed by moderators ({post.removedReason?.replace(/_/g, ' ')}). See the public
-          moderation log for details.
-        </ThemedText>
-      ) : (
-        <>
-          <ThemedText>{post.body}</ThemedText>
-          <ReactionBar
-            kind={post.community.kind}
-            targetType="post"
-            targetId={post.id}
-            counts={post.counts}
-            mine={post.myReaction}
-          />
-        </>
-      )}
 
-      <ThemedText type="smallBold">
-        {comments.length} {comments.length === 1 ? 'comment' : 'comments'}
-      </ThemedText>
-      <CommentThread
-        comments={comments}
-        kind={post.community.kind}
-        onReply={isFullyOnboarded(me) && !removed ? setReplyTo : undefined}
-      />
-
-      {!removed && isFullyOnboarded(me) ? (
-        <View style={styles.composer}>
-          {replyTo ? (
-            <Pressable accessibilityRole="button" onPress={() => setReplyTo(null)}>
-              <ThemedText type="small" themeColor="textSecondary">
-                Replying to @{replyTo.author?.username ?? 'deleted'} · tap to cancel
+      {!removed && member ? (
+        <View style={[styles.composer, { borderBottomColor: theme.backgroundSelected }]}>
+          <View style={styles.meta}>
+            <Avatar name={me!.username} size={28} />
+            {replyTo ? (
+              <Pressable accessibilityRole="button" onPress={() => setReplyTo(null)}>
+                <ThemedText type="caption" themeColor="textSecondary">
+                  Replying to {replyTo.author?.username ?? 'deleted'} · tap to cancel
+                </ThemedText>
+              </Pressable>
+            ) : (
+              <ThemedText type="caption" themeColor="textSecondary">
+                Join the conversation
               </ThemedText>
-            </Pressable>
-          ) : null}
+            )}
+          </View>
           <Field
             label={replyTo ? 'Your reply' : 'Add a comment'}
             value={draft}
@@ -146,22 +159,51 @@ export default function PostScreen() {
             multiline
             maxLength={10000}
           />
-          <Button
-            title="Post comment"
-            onPress={send}
-            busy={busy}
-            disabled={draft.trim().length === 0}
-          />
+          <Button title="Post comment" onPress={send} busy={busy} size="small" />
         </View>
       ) : !removed ? (
-        <Button title="Join to comment" variant="secondary" onPress={() => router.push('/join')} />
+        <View style={styles.composer}>
+          <Button
+            title="Join to comment"
+            variant="secondary"
+            onPress={() => router.push('/join')}
+          />
+        </View>
       ) : null}
       <ErrorText message={error} />
+
+      <View style={styles.commentsHead}>
+        <ThemedText type="headline">
+          {comments.length} {comments.length === 1 ? 'comment' : 'comments'}
+        </ThemedText>
+      </View>
+      <ThreadedComments
+        comments={comments}
+        kind={post.community.kind}
+        onReply={member && !removed ? setReplyTo : undefined}
+      />
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  meta: { flexDirection: 'row', gap: Spacing.one, alignItems: 'center' },
-  composer: { gap: Spacing.two },
+  post: {
+    padding: Spacing.three,
+    gap: Spacing.three - 4,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  meta: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
+  title: { fontSize: 24, lineHeight: 30 },
+  body: { fontSize: 17, lineHeight: 25 },
+  actions: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, flexWrap: 'wrap' },
+  composer: {
+    padding: Spacing.three,
+    gap: Spacing.two,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  commentsHead: {
+    paddingHorizontal: Spacing.three,
+    paddingTop: Spacing.three,
+    paddingBottom: Spacing.two,
+  },
 });

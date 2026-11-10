@@ -1,14 +1,18 @@
 /**
- * Learn more about light and dark modes:
- * https://docs.expo.dev/guides/color-schemes/
+ * Returns the active palette. Dark-first by default (see ColorMode in
+ * constants/theme.ts); set ColorMode to 'system' to follow the device.
  */
 
-import { Colors } from '@/constants/theme';
+import { ColorMode, Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export function useTheme() {
-  const scheme = useColorScheme();
-  const theme = scheme === 'dark' ? 'dark' : 'light';
+  const system = useColorScheme(); // always called (rules of hooks)
+  const scheme = ColorMode === 'system' ? (system === 'light' ? 'light' : 'dark') : ColorMode;
+  return Colors[scheme];
+}
 
-  return Colors[theme];
+export function useIsDark() {
+  const system = useColorScheme();
+  return ColorMode === 'system' ? system !== 'light' : ColorMode === 'dark';
 }

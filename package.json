@@ -21,7 +21,8 @@
     "check:dco": "node scripts/check-dco.mjs",
     "e2e": "pnpm --filter @demanity/e2e e2e",
     "e2e:all": "pnpm db:up && pnpm build && pnpm --filter @demanity/mobile exec expo export --platform web && pnpm e2e",
-    "demo": "pnpm db:up && pnpm build && pnpm --filter @demanity/api seed:dev-moderators && pnpm --filter @demanity/mobile exec expo export --platform web && node scripts/demo.mjs"
+    "demo": "pnpm db:up && pnpm build && pnpm --filter @demanity/api seed:dev-moderators && pnpm --filter @demanity/mobile exec expo export --platform web && node scripts/demo.mjs",
+    "screenshots": "pnpm --filter @demanity/e2e exec playwright test -c screenshots.config.ts"
   },
   "devDependencies": {
     "prettier": "^3.9.10",

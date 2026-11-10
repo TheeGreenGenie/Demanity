@@ -76,3 +76,6 @@ desktop.ini
 e2e/test-results/
 e2e/playwright-report/
 e2e/blob-report/
+
+# --- Design review screenshots (pnpm screenshots) ---
+e2e/screenshots-out/
