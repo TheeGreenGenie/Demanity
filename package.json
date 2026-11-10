@@ -1,0 +1,31 @@
+{
+  "name": "demanity",
+  "private": true,
+  "description": "Demanity: open-source government accountability platform",
+  "license": "AGPL-3.0-or-later",
+  "packageManager": "pnpm@10.17.1",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "check": "turbo run lint typecheck test",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "db:up": "docker compose -f infra/docker-compose.yml up -d",
+    "db:down": "docker compose -f infra/docker-compose.yml down",
+    "check:dco": "node scripts/check-dco.mjs",
+    "e2e": "pnpm --filter @demanity/e2e e2e",
+    "e2e:all": "pnpm db:up && pnpm build && pnpm --filter @demanity/mobile exec expo export --platform web && pnpm e2e",
+    "demo": "pnpm db:up && pnpm build && pnpm --filter @demanity/api seed:dev-moderators && pnpm --filter @demanity/mobile exec expo export --platform web && node scripts/demo.mjs",
+    "screenshots": "pnpm --filter @demanity/e2e exec playwright test -c screenshots.config.ts"
+  },
+  "devDependencies": {
+    "prettier": "^3.9.10",
+    "turbo": "^2.11.10"
+  }
+}

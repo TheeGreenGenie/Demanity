@@ -1,0 +1,47 @@
+{
+  "name": "@demanity/api",
+  "version": "0.0.0",
+  "private": true,
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "main": "dist/server.js",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/server.js",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "moderator:grant": "node --env-file=../../.env scripts/grant-moderator.mjs grant",
+    "moderator:revoke": "node --env-file=../../.env scripts/grant-moderator.mjs revoke",
+    "seed:dev-moderators": "tsx dev/run-seed-moderators.ts",
+    "dev:panel": "tsx dev/run-dev-panel.ts",
+    "sample-data:clear": "tsx dev/run-clear-sample-data.ts",
+    "ingest:congress": "tsx src/ingest/run.ts --source congress",
+    "ingest:states": "tsx src/ingest/run.ts --source states",
+    "ingest:courts": "tsx src/ingest/run.ts --source courts",
+    "ingest:orders": "tsx src/ingest/run.ts --source orders",
+    "ingest:members": "tsx src/ingest/run.ts --source members"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.8.0",
+    "@demanity/db": "workspace:*",
+    "@fastify/cors": "^11.4.1",
+    "@fastify/rate-limit": "^11.2.2",
+    "@simplewebauthn/server": "^14.1.0",
+    "fastify": "^5.12.8",
+    "ioredis": "^6.0.0",
+    "pg": "^8.23.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@simplewebauthn/browser": "^14.0.0",
+    "@types/node": "^24.19.2",
+    "@types/pg": "^8.23.1",
+    "eslint": "^10.14.0",
+    "tsx": "^4.23.15",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.72.2",
+    "vitest": "^5.1.0"
+  }
+}

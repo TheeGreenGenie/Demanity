@@ -97,6 +97,8 @@ Open tasks are posted as GitHub Issues once they are safe to discuss publicly.
 - **Deduplication ([ADR 0002](adr/0002-uniqueness-token-and-identity-vault.md)):** a keyed one-way token computed from the state and license number the user enters, before anything is sent to SheerID. SheerID documents no duplicate detection, so we don't rely on it. No SheerID data is stored.
 - **Device key:** a WebAuthn passkey ([W3C WebAuthn](https://www.w3.org/TR/webauthn-3/)). Voting requires a challenge-response signature from the device. Several devices are allowed.
 - **2FA (required):** at least one of a secure email or a phone number, kept in the identity vault.
+  - **Email is the default and free:** the vault generates and checks its own one-time codes; an email service only delivers them.
+  - **SMS is optional:** available only when a provider (Twilio Verify) is configured, because text messages always cost money.
   - **Lost device:** authenticate with 2FA, then register a new passkey. Old keys are revoked.
   - **Lost 2FA too:** contact moderation and re-verify. The re-verification maps to the same uniqueness token, and the account is rebound.
 - **Age:** 18+ only. This keeps the platform outside the FTC's COPPA rule, which covers children under 13 ([FTC COPPA](https://www.ftc.gov/legal-library/browse/rules/childrens-online-privacy-protection-rule-coppa)), and matches voting age.

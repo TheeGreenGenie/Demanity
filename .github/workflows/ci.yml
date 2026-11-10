@@ -1,0 +1,121 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, phase-0]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: demanity_test
+          POSTGRES_USER: demanity
+          POSTGRES_PASSWORD: ci-only
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U demanity -d demanity_test"
+          --health-interval 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgres://demanity:ci-only@127.0.0.1:5432/demanity_test
+      TEST_REDIS_URL: redis://127.0.0.1:6379
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: DCO sign-off
+        if: github.event_name == 'pull_request'
+        run: node scripts/check-dco.mjs origin/${{ github.base_ref }} HEAD
+
+      - run: pnpm format:check
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+
+      - name: Dependency audit
+        run: pnpm audit --prod --audit-level high
+
+  # Browser end-to-end tests against the real API, vault and web app
+  # (e2e/README.md). Services mirror infra/docker-compose.yml so the
+  # .env.example database URLs work unchanged. No real email is sent
+  # (the stack forces EMAIL_DELIVERY=console) and no third-party keys are used.
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      activity-db:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: demanity_activity
+          POSTGRES_USER: demanity
+          POSTGRES_PASSWORD: dev-only-activity
+        ports: ['5434:5432']
+        options: >-
+          --health-cmd "pg_isready -U demanity -d demanity_activity"
+          --health-interval 5s --health-retries 10
+      vault-db:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: demanity_vault
+          POSTGRES_USER: vault
+          POSTGRES_PASSWORD: dev-only-vault
+        ports: ['5433:5432']
+        options: >-
+          --health-cmd "pg_isready -U vault -d demanity_vault"
+          --health-interval 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Throwaway secrets generated for this run only; third-party keys stay empty.
+      - name: Create .env
+        run: |
+          grep -v -E '^(RATE_LIMIT_SECRET|VAULT_SERVICE_TOKEN|VAULT_TOKEN_KEYS|VAULT_LOOKUP_KEY|VAULT_LOCAL_KEK)=' .env.example > .env
+          node scripts/gen-secrets.mjs >> .env
+
+      - run: pnpm build
+      - run: pnpm --filter @demanity/mobile exec expo export --platform web
+      - run: pnpm e2e
+
+      - name: Keep traces of failed tests
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-traces
+          path: e2e/test-results
+          retention-days: 7

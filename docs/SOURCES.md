@@ -13,7 +13,7 @@
 
 Opinions do not need a citation, but they must be presented as opinion.
 
-The app checks every link against this list when it is submitted. Domains not on the list are rejected, and the submitter can request that the domain be added.
+The app checks every link against this list when it is submitted. A link is accepted when its host is a listed domain or a subdomain of one. The whole `.gov` domain is listed as Tier 1, because only U.S. government bodies can register `.gov` names. Domains not on the list are rejected, and the submitter can request that the domain be added.
 
 ## Tier 1: Primary official sources (source-quality weight 1.0)
 - **Federal legislation and records:**

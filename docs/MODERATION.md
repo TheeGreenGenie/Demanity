@@ -21,6 +21,19 @@ The moderation team has final authority over who is verified:
 
 Every override records a reason code. Overrides also count toward the symmetric-enforcement audits in [NONPARTISANSHIP.md](NONPARTISANSHIP.md).
 
+**How this works today (implemented):**
+- **Becoming a moderator.** The moderator role is granted or revoked only by an operator tool. There is no API for it, so no account can promote itself. Every grant and revocation appears in the public log.
+- **Review queue.** When the verification provider can't decide, the account enters a review queue. The queue holds **no identity data**. Once a moderator approves, the user re-submits their details. The duplicate-person, ban and 18+ checks still apply. An approval works once.
+- **Bans.** A ban ends all sessions, revokes passkeys and bans the underlying identity, so the person cannot create a new account.
+- **Recovery when both the device and 2FA are lost.** The user files a request and a moderator approves it. The user then re-verifies their identity, which must match the identity already on the account. Each approval works once.
+- **Rules for every decision:**
+  - It must use a published reason code (`GET /v1/moderation/reason-codes`), and the code must fit the decision.
+  - Moderators cannot decide their own cases.
+- **The public log** (`GET /v1/moderation/log`):
+  - Guests can read it.
+  - It shows the action, reason code, role and time. It never shows which moderator acted.
+  - It is append-only, enforced by the database.
+
 ## 3. Context notes
 - Moderators may add a labeled **"Moderator context"** note to any post, comment, poll, citation, legislation item or organization-page vote.
 - Each note must cite an approved source ([SOURCES.md](SOURCES.md)).
@@ -46,6 +59,16 @@ Every override records a reason code. Overrides also count toward the symmetric-
    - **Removed**, used only for clear misinformation.
 4. **Reversal.** A **different** panel of three, with no members from the first panel, can reverse any outcome. Every reversal is logged publicly.
 
+**How it is built (Phase 6, REVIEW BEFORE RELEASE):**
+- **Flags:** one per member per comment; authors can't flag their own comment but can request a check. A review opens at `FACT_CHECK_FLAG_THRESHOLD` flags (default 5). Reach-based triggers are not built yet, because comment reach is not tracked.
+- **Panels:** three moderators, never the comment's author. When the pool allows, one moderator is drawn from each self-declared lean (left, center, right), then the rest at random. Leans are internal; only totals are published (`GET /v1/moderation/leans`). A review waits until at least three eligible moderators exist.
+- **Blind votes:** a panelist sees only their own vote and how many votes are in.
+- **Outcome:** the label at least two panelists chose. If all three differ, the **median label by severity** (verified < context added < misleading < removed) applies, so no single panelist decides. *This tie rule is the founder's proposal.*
+- **Removed** hides the comment with reason `clear_misinformation`. A later reversal to any other label restores it.
+- **Reversal:** the comment's author, or a moderator who sat on no panel for the comment, can ask once per decision. The new panel excludes everyone who sat on an earlier panel for that comment.
+- **AI first pass** ([ADR 0009](adr/0009-ai-fact-check-first-pass.md)): off unless configured. The model gets no tools; the comment is fenced as untrusted data; output must match a JSON schema; suggested sources are limited to the approved list; the draft notes injection attempts. Drafts are shown only to the panel and never to members.
+- **Public label:** "Fact-checked: verified / context added / misleading" or "Removed as clear misinformation", with the panel split (for example, "2 of 3 moderators") and whether it was a second review. Panelists are never named.
+
 ## 5. Citations and contributors
 - **Contributor applications:** applicants write an essay for each category. The team reviews it, and contributors renew yearly.
 - **Auto-proposed citations** can be approved or deleted by moderators only.
@@ -59,6 +82,7 @@ Every override records a reason code. Overrides also count toward the symmetric-
   2. "Here are some reasons this citation may not reflect your view," followed by **devil's-advocate entries** written by contributors in that category.
 - Users vote on the entries. Entries that are voted helpful earn contribution points ([SCORING.md §5](SCORING.md#5-contribution-score)).
 - Entries must follow the citation rule. Abusive entries are removed.
+- **Built (Phase 6):** only contributors approved in the citation's topic (or moderators) can write an entry, one per citation, never on their own citation. Each entry needs an approved source. Entries are shown unattributed, most helpful first (by Wilson lower bound). Members vote "Helpful" or "Not helpful" once per entry; only totals are stored. Moderators can remove entries with a published reason; a removal counts as a takedown in the author's contribution score.
 
 ## 7. Context labels shown everywhere
 - **Polls:** *"Demanity users are a self-selected group; results do not represent all Americans."*

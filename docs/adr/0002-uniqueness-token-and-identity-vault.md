@@ -19,7 +19,14 @@
    - the 2FA email and/or phone, encrypted with key-management data keys, plus a keyed lookup hash;
    - the encrypted link to the pseudonymous account ID.
 3. **Activity database.** Holds only pseudonymous IDs. No staff role can access both stores.
-4. **Secret management.**
+   - **The vault never stores the account ID in readable form.** It stores a keyed hash of it (`account_lookup`). Without the vault's lookup key, nothing joins the two databases.
+   - **The vault itself sends 2FA codes** through the Twilio Verify adapter. After a user submits an email or phone number, the API never sees it decrypted again.
+   - **Identity attributes and contact values are never logged.** Unknown request fields are rejected rather than silently dropped.
+4. **Key-encryption key (decided 2026-11-10): AWS KMS.**
+   - Each record gets its own random data key, which is wrapped with KMS `Encrypt` and unwrapped with `Decrypt` ([AWS KMS API](https://docs.aws.amazon.com/kms/latest/APIReference/API_Encrypt.html)). The master key never leaves KMS.
+   - Every call passes the key ID and a fixed encryption context, so KMS refuses to decrypt anything wrapped for another purpose.
+   - AWS credentials come from the server's IAM role, never from configuration files.
+5. **Secret management.**
    - `vault_secret` lives in the key-management service.
    - Rotation needs a re-keying plan, because a rotated secret changes every token. The plan is to keep versioned secrets and re-hash each account the next time it verifies.
 
