@@ -4,7 +4,16 @@ import { useEffect, useState } from 'react';
 import { Linking, Pressable, StyleSheet, View } from 'react-native';
 
 import { Avatar } from '@/components/avatar';
-import { SampleBanner, Section, STANCE_PRIVACY, StatusChip, TallyBar } from '@/components/civic';
+import {
+  FollowToggle,
+  SampleBanner,
+  Section,
+  STAGES,
+  StageBanner,
+  STANCE_PRIVACY,
+  StatusChip,
+  TallyBar,
+} from '@/components/civic';
 import { Button, ErrorText } from '@/components/form';
 import { Screen } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
@@ -12,6 +21,7 @@ import { Brand, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { civic, describeError, type Bill } from '@/lib/api';
 import { isFullyOnboarded, useAuth } from '@/lib/auth';
+import { stanceStore, type Stance } from '@/lib/stance-store';
 
 export default function BillScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -21,6 +31,12 @@ export default function BillScreen() {
   const [bill, setBill] = useState<Bill | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<'support' | 'oppose' | null>(null);
+  // Your own stance, remembered only on this device (the server never knows it).
+  const [mine, setMine] = useState<Stance | null>(null);
+
+  useEffect(() => {
+    stanceStore.get(id).then(setMine);
+  }, [id]);
 
   useEffect(() => {
     civic
@@ -34,6 +50,8 @@ export default function BillScreen() {
     setBusy(stance);
     try {
       const { tally } = await civic.stance(token, id, stance);
+      await stanceStore.set(id, stance);
+      setMine(stance);
       setBill((b) => (b ? { ...b, weighedIn: true, tally } : b));
     } catch (err) {
       setError(describeError(err));
@@ -48,6 +66,15 @@ export default function BillScreen() {
     <Screen flush>
       {bill.isSample ? <SampleBanner what="this bill, its sponsors and dates are made up" /> : null}
       <View style={styles.head}>
+        <View style={styles.titleRow}>
+          <View style={styles.flex}>
+            <StageBanner stage={bill.stage} />
+          </View>
+          <FollowToggle kind="bill" name={bill.id} />
+        </View>
+        <ThemedText type="caption" themeColor="textSecondary">
+          {STAGES[bill.stage].blurb}
+        </ThemedText>
         <View style={styles.meta}>
           <StatusChip status={bill.status} />
           <ThemedText type="caption" themeColor="textSecondary">
@@ -56,6 +83,14 @@ export default function BillScreen() {
         </View>
         <ThemedText type="subtitle">{bill.title}</ThemedText>
         <ThemedText>{bill.summary}</ThemedText>
+        {bill.impact ? (
+          <View style={[styles.impact, { backgroundColor: theme.backgroundElement }]}>
+            <ThemedText type="caption" style={{ color: Brand.primary, fontWeight: 900 }}>
+              WHAT CHANGES FOR YOU
+            </ThemedText>
+            <ThemedText type="small">{bill.impact}</ThemedText>
+          </View>
+        ) : null}
         <ThemedText type="caption" themeColor="textSecondary">
           Introduced {bill.introducedAt} · Last action {bill.lastActionAt}
         </ThemedText>
@@ -94,6 +129,12 @@ export default function BillScreen() {
         {bill.weighedIn && bill.tally ? (
           <>
             <ThemedText type="headline">How members weighed in</ThemedText>
+            {mine ? (
+              <ThemedText type="small" themeColor="textSecondary">
+                You {mine === 'support' ? 'supported' : 'opposed'} this bill (remembered on this
+                device only).
+              </ThemedText>
+            ) : null}
             <TallyBar tally={bill.tally} />
           </>
         ) : (
@@ -162,6 +203,8 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   bold: { fontWeight: 800 },
   head: { padding: Spacing.three, gap: Spacing.two },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
+  impact: { borderRadius: Radius.medium, padding: Spacing.three - 4, gap: 2 },
   meta: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, flexWrap: 'wrap' },
   links: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
   tag: { borderRadius: Radius.pill, paddingHorizontal: Spacing.three - 4, paddingVertical: 4 },

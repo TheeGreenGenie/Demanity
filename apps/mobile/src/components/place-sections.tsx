@@ -5,6 +5,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 
 import {
   BillCard,
+  formatStat,
   LeaderRow,
   OverallCard,
   peerWord,
@@ -18,7 +19,6 @@ import { ThemedText } from '@/components/themed-text';
 import { Brand, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { civic, describeError, type Place, type Scores } from '@/lib/api';
-import { useAuth } from '@/lib/auth';
 
 export type PlaceTab = 'overview' | 'scores' | 'living' | 'leaders';
 export const PLACE_TABS: readonly { key: PlaceTab; label: string }[] = [
@@ -28,21 +28,21 @@ export const PLACE_TABS: readonly { key: PlaceTab; label: string }[] = [
   { key: 'leaders', label: 'Leaders' },
 ];
 
+/** Place data is identical for everyone (cached on the server), so no token is sent. */
 export function usePlace(slug: string | null | undefined) {
-  const { token } = useAuth();
   const [place, setPlace] = useState<Place | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     if (!slug) return;
     let cancelled = false;
     civic
-      .place(token, slug)
+      .place(null, slug)
       .then((p) => !cancelled && setPlace(p))
       .catch((err) => !cancelled && setError(describeError(err)));
     return () => {
       cancelled = true;
     };
-  }, [slug, token]);
+  }, [slug]);
   return { place, error };
 }
 
@@ -62,25 +62,29 @@ function useScores(load: () => Promise<Scores>, key: string) {
   return { scores, error };
 }
 
-/** The 32 category scores for a place or a leader. */
+/** Category scores for a place (conditions) or a leader (trust). */
 export function ScoresTab({ kind, slug }: { kind: 'place' | 'leader'; slug: string }) {
-  const { token } = useAuth();
   const { scores, error } = useScores(
-    () => (kind === 'place' ? civic.placeScores(token, slug) : civic.leaderScores(token, slug)),
-    `${kind}:${slug}:${token}`,
+    () => (kind === 'place' ? civic.placeScores(null, slug) : civic.leaderScores(null, slug)),
+    `${kind}:${slug}`,
   );
   if (error) return <ErrorText message={error} />;
   if (!scores) return null;
   const sample = scores.categories.some((c) => c.isSample);
+  const applicable = scores.categories.filter((c) => c.applicable).length;
   return (
     <View>
       {sample ? <SampleBanner what="these scores and explanations are made up" /> : null}
-      <OverallCard overall={scores.overall} peerKind={scores.peerGroup} />
+      <OverallCard overall={scores.overall} />
       <Section
-        title="Scores in all 32 categories"
-        caption={`0-100, higher is better · compared only with other ${peerWord(scores.peerGroup)}`}
+        title={scores.kind === 'conditions' ? 'Conditions by category' : 'Trust by category'}
+        caption={`0-100, higher is better · ${applicable} of ${scores.categories.length} categories apply · compared with ${scores.peerLabel}`}
       />
-      <ScoreList items={scores.categories} peerKind={scores.peerGroup} />
+      <ScoreList
+        items={scores.categories}
+        peerLabel={scores.peerLabel}
+        subjectKind={scores.subjectKind}
+      />
     </View>
   );
 }
@@ -108,9 +112,12 @@ function OverviewTab({ place }: { place: Place }) {
   return (
     <View>
       {sample ? <SampleBanner /> : null}
-      <OverallCard overall={place.overall} peerKind={place.kind} />
+      <OverallCard overall={place.overall} />
 
-      <Section title="Most pressing issues" caption="Where this place scores worst vs. its peers">
+      <Section
+        title="Most pressing issues"
+        caption={`Where conditions are worst vs. ${place.peerLabel}`}
+      >
         {place.issues.length === 0 ? (
           <Empty text="No issue data yet. It arrives with official statistics." />
         ) : (
@@ -143,16 +150,25 @@ function OverviewTab({ place }: { place: Place }) {
         )}
       </Section>
 
-      <Section title="Upcoming elections">
+      <Section
+        title="Upcoming elections"
+        caption="Cast a mock ballot, and check that you're registered"
+      >
         {place.elections.length === 0 ? (
           <Empty text="No upcoming elections listed yet." />
         ) : (
-          place.elections.map((e, idx) => {
+          place.elections.map((e) => {
             const d = new Date(`${e.electionDate}T12:00:00Z`);
             return (
-              <View
-                key={idx}
-                style={[styles.election, { borderBottomColor: theme.backgroundSelected }]}
+              <Pressable
+                key={e.id}
+                accessibilityRole="link"
+                onPress={() => router.push({ pathname: '/election/[id]', params: { id: e.id } })}
+                style={({ pressed }) => [
+                  styles.election,
+                  { borderBottomColor: theme.backgroundSelected },
+                  pressed && { opacity: 0.75 },
+                ]}
               >
                 <View style={[styles.date, { backgroundColor: theme.backgroundElement }]}>
                   <ThemedText type="caption" style={{ color: Brand.primary, fontWeight: 900 }}>
@@ -166,16 +182,26 @@ function OverviewTab({ place }: { place: Place }) {
                 <View style={styles.flex}>
                   <ThemedText type="smallBold">{e.office}</ThemedText>
                   <ThemedText type="caption" themeColor="textSecondary">
-                    {e.kind[0]!.toUpperCase() + e.kind.slice(1)} election · {e.sourceLabel}
+                    {e.kind[0]!.toUpperCase() + e.kind.slice(1)} election
+                    {e.candidates ? ` · ${e.candidates} candidates` : ''}
                   </ThemedText>
+                  {e.candidates ? (
+                    <ThemedText type="caption" style={{ color: Brand.primary, fontWeight: 800 }}>
+                      Cast a mock ballot →
+                    </ThemedText>
+                  ) : null}
                 </View>
-              </View>
+              </Pressable>
             );
           })
         )}
+        <View style={styles.guideLinks}>
+          <GuideLink slug="register-to-vote" label="Register or check your registration" />
+          <GuideLink slug="contact-your-officials" label="Contact your officials" />
+        </View>
       </Section>
 
-      <Section title="Current leaders" caption="Overall trust score, 0-100">
+      <Section title="Current leaders" caption="Trust score, 0-100">
         {place.leaders.length === 0 ? (
           <Empty text="No leaders listed for this place yet." />
         ) : (
@@ -232,27 +258,105 @@ function OverviewTab({ place }: { place: Place }) {
   );
 }
 
+function GuideLink({ slug, label }: { slug: string; label: string }) {
+  const router = useRouter();
+  const theme = useTheme();
+  return (
+    <Pressable
+      accessibilityRole="link"
+      onPress={() => router.push({ pathname: '/guide/[slug]', params: { slug } })}
+      style={({ pressed }) => [
+        styles.childChip,
+        { backgroundColor: theme.backgroundElement },
+        pressed && { opacity: 0.75 },
+      ]}
+    >
+      <Ionicons name="book-outline" size={14} color={Brand.humanity} />
+      <ThemedText type="caption" style={{ fontWeight: 700 }}>
+        {label}
+      </ThemedText>
+    </Pressable>
+  );
+}
+
+/** One headline cost number; tap to open the full breakdown. */
 function LivingTab({ place }: { place: Place }) {
+  const theme = useTheme();
+  const [open, setOpen] = useState(false);
+  const cost = place.cost;
+  const col = place.stats.find((s) => s.key === 'cost_of_living');
+  let compare: { text: string; color: string } | null = null;
+  if (cost?.peerMedian) {
+    const diff = ((cost.basicsMonthly - cost.peerMedian) / cost.peerMedian) * 100;
+    compare =
+      Math.abs(diff) < 1
+        ? { text: `About the median of ${place.peerLabel}`, color: theme.textSecondary }
+        : {
+            text: `${Math.abs(diff).toFixed(0)}% ${diff > 0 ? 'more' : 'less'} than the median of ${place.peerLabel}`,
+            color: diff > 0 ? Brand.dislike : Brand.like,
+          };
+  }
   return (
     <View>
       {place.stats.some((s) => s.isSample) ? (
         <SampleBanner what="these statistics are made up" />
       ) : null}
-      <Section
-        title="Cost and quality of life"
-        caption={`Compared with the median of other ${peerWord(place.kind)}`}
-      />
-      {place.stats.length === 0 ? (
-        <Empty text="No statistics yet for this kind of place." />
+      {cost ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ expanded: open }}
+          accessibilityLabel={`Monthly basics ${formatStat(cost.basicsMonthly, 'usd_month')}. ${open ? 'Hide' : 'Show'} breakdown`}
+          onPress={() => setOpen((o) => !o)}
+          style={({ pressed }) => [
+            styles.costCard,
+            { backgroundColor: theme.backgroundElement },
+            pressed && { opacity: 0.85 },
+          ]}
+        >
+          <ThemedText type="caption" themeColor="textSecondary">
+            MONTHLY BASICS, ONE ADULT
+          </ThemedText>
+          <ThemedText style={styles.costValue}>
+            {formatStat(cost.basicsMonthly, 'usd_month')}
+          </ThemedText>
+          {compare ? (
+            <ThemedText type="smallBold" style={{ color: compare.color }}>
+              {compare.text}
+            </ThemedText>
+          ) : null}
+          <View style={styles.costMore}>
+            <ThemedText type="caption" style={{ color: Brand.primary, fontWeight: 800 }}>
+              {open ? 'Hide the breakdown' : 'See the full breakdown'}
+            </ThemedText>
+            <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={14} color={Brand.primary} />
+          </View>
+        </Pressable>
       ) : (
-        <StatGrid stats={place.stats} peerKind={place.kind} />
+        <Empty text="No cost data yet for this place." />
       )}
-      <View style={styles.note}>
-        <ThemedText type="caption" themeColor="textSecondary">
-          Green means better for residents than the typical {peerWord(place.kind, false)}, orange
-          means worse. Each figure lists its source and year.
-        </ThemedText>
-      </View>
+      {open && cost ? (
+        <View>
+          <View style={styles.note}>
+            <ThemedText type="small" themeColor="textSecondary">
+              How it’s calculated: {cost.formula}
+            </ThemedText>
+            {cost.realIncome && col ? (
+              <ThemedText type="small">
+                Median income adjusted for local prices:{' '}
+                <ThemedText type="smallBold">{formatStat(cost.realIncome, 'usd_year')}</ThemedText>{' '}
+                (cost-of-living index {Math.round(col.value)}, where 100 = U.S. average).
+              </ThemedText>
+            ) : null}
+          </View>
+          <StatGrid stats={place.stats} peerLabel={place.peerLabel} />
+          <View style={styles.note}>
+            <ThemedText type="caption" themeColor="textSecondary">
+              Green means better for residents than the typical place in its group, orange means
+              worse. Each figure lists its source and year.
+            </ThemedText>
+          </View>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -303,6 +407,13 @@ const styles = StyleSheet.create({
   },
   date: { width: 56, alignItems: 'center', borderRadius: Radius.small, paddingVertical: 4 },
   dateDay: { fontSize: 22, lineHeight: 26, fontWeight: 900 },
+  guideLinks: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.two,
+    paddingHorizontal: Spacing.three,
+    paddingTop: Spacing.two,
+  },
   children: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -318,6 +429,14 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.one + 2,
   },
   parent: { padding: Spacing.three },
-  note: { padding: Spacing.three },
+  note: { padding: Spacing.three, gap: Spacing.two },
+  costCard: {
+    margin: Spacing.three,
+    padding: Spacing.four,
+    borderRadius: Radius.large,
+    gap: Spacing.one + 2,
+  },
+  costValue: { fontSize: 44, lineHeight: 50, fontWeight: 900 },
+  costMore: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: Spacing.one },
   empty: { paddingHorizontal: Spacing.three, paddingVertical: Spacing.two },
 });

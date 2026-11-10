@@ -6,7 +6,7 @@
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createPool } from '@demanity/db';
+import { createPool, migrate } from '@demanity/db';
 import { clearSampleData } from './seed-sample-civic.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -18,6 +18,7 @@ if (!process.env.ACTIVITY_DATABASE_URL) {
 }
 const pool = createPool(process.env.ACTIVITY_DATABASE_URL);
 try {
+  await migrate(pool, join(here, '..', 'migrations'));
   await clearSampleData(pool);
   console.log('Sample data deleted. Dev seed accounts are separate: see the pre-launch checklist.');
 } finally {

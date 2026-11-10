@@ -1,8 +1,10 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
+import { Avatar } from '@/components/avatar';
+import { BillCard } from '@/components/civic';
 import { Button, ErrorText } from '@/components/form';
 import { Screen } from '@/components/screen';
 import { communityColor, Pill, PillRow, PostCard } from '@/components/social';
@@ -10,7 +12,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Brand, Radius, Spacing } from '@/constants/theme';
 import { usePagedPosts } from '@/hooks/use-paged-posts';
 import { useTheme } from '@/hooks/use-theme';
-import { social, type Community } from '@/lib/api';
+import { social, type Bill, type Community, type FollowedItem, type Post } from '@/lib/api';
 import { isFullyOnboarded, useAuth } from '@/lib/auth';
 
 export default function HomeScreen() {
@@ -66,13 +68,18 @@ function MemberHome() {
         </ThemedText>
       </View>
       <ErrorText message={feed.error} />
-      {feed.posts.map((p) => (
-        <PostCard key={p.id} post={p} />
-      ))}
-      {!feed.loading && feed.posts.length === 0 ? (
+      <FollowingRow items={feed.first?.following ?? []} />
+      {mergeFeed(feed.posts, feed.first?.updates ?? []).map((item) =>
+        item.kind === 'post' ? (
+          <PostCard key={item.post.id} post={item.post} />
+        ) : (
+          <BillCard key={`bill-${item.bill.id}`} bill={item.bill} />
+        ),
+      )}
+      {!feed.loading && feed.posts.length === 0 && !(feed.first?.updates ?? []).length ? (
         <View style={styles.empty}>
           <ThemedText themeColor="textSecondary">
-            Nothing here yet. Follow some communities to fill your feed.
+            Nothing here yet. Follow communities, leaders, places or bills to fill your feed.
           </ThemedText>
         </View>
       ) : null}
@@ -87,6 +94,77 @@ function MemberHome() {
         </View>
       ) : null}
     </Screen>
+  );
+}
+
+/**
+ * Posts (paged) and bill updates from what you follow (first page only),
+ * merged newest first. Both carry a "why you're seeing this" reason.
+ */
+function mergeFeed(posts: Post[], updates: Bill[]) {
+  const items = [
+    ...posts.map((post) => ({ kind: 'post' as const, at: post.createdAt, post })),
+    ...updates.map((bill) => ({
+      kind: 'bill' as const,
+      at: `${bill.lastActionAt}T12:00:00Z`,
+      bill,
+    })),
+  ];
+  return items.sort((a, b) => b.at.localeCompare(a.at));
+}
+
+/** Followed leaders, places and bills, like a stories row. */
+function FollowingRow({ items }: { items: FollowedItem[] }) {
+  const router = useRouter();
+  const theme = useTheme();
+  if (items.length === 0) return null;
+  const open = (i: FollowedItem) =>
+    i.kind === 'leader'
+      ? router.push({ pathname: '/leader/[slug]', params: { slug: i.id } })
+      : i.kind === 'place'
+        ? router.push({ pathname: '/place/[slug]', params: { slug: i.id } })
+        : router.push({ pathname: '/bill/[id]', params: { id: i.id } });
+  return (
+    <View style={[styles.followingWrap, { borderBottomColor: theme.backgroundSelected }]}>
+      <ThemedText type="caption" themeColor="textSecondary" style={styles.followingTitle}>
+        FOLLOWING
+      </ThemedText>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.followingRow}
+      >
+        {items.map((i) => (
+          <Pressable
+            key={`${i.kind}:${i.id}`}
+            accessibilityRole="link"
+            accessibilityLabel={`${i.name}, ${i.caption}`}
+            onPress={() => open(i)}
+            style={({ pressed }) => [styles.followingItem, pressed && { opacity: 0.7 }]}
+          >
+            {i.kind === 'leader' ? (
+              <Avatar name={i.name} size={56} />
+            ) : (
+              <View
+                style={[
+                  styles.followingIcon,
+                  { backgroundColor: i.kind === 'place' ? Brand.location : Brand.primary },
+                ]}
+              >
+                <Ionicons
+                  name={i.kind === 'place' ? 'location' : 'document-text'}
+                  size={26}
+                  color="#fff"
+                />
+              </View>
+            )}
+            <ThemedText type="caption" numberOfLines={1} style={styles.followingName}>
+              {i.name.replace('[Sample] ', '')}
+            </ThemedText>
+          </Pressable>
+        ))}
+      </ScrollView>
+    </View>
   );
 }
 
@@ -196,6 +274,18 @@ function GuestHome() {
 }
 
 const styles = StyleSheet.create({
+  followingWrap: { borderBottomWidth: StyleSheet.hairlineWidth, paddingVertical: Spacing.two },
+  followingTitle: { paddingHorizontal: Spacing.three, fontWeight: 900, letterSpacing: 0.5 },
+  followingRow: { paddingHorizontal: Spacing.three, gap: Spacing.three, paddingTop: Spacing.two },
+  followingItem: { width: 68, alignItems: 'center', gap: 4 },
+  followingIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  followingName: { fontWeight: 700, textAlign: 'center' },
   feedHeader: {
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.three - 4,

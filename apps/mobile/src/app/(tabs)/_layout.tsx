@@ -42,8 +42,12 @@ export default function TabLayout() {
       screenOptions={{
         tabBarActiveTintColor: theme.text,
         tabBarInactiveTintColor: theme.textSecondary,
-        tabBarShowLabel: false, // icon-only bar; titles remain for screen readers
+        tabBarShowLabel: true,
+        tabBarLabelStyle: { fontSize: 11, lineHeight: 14, fontWeight: '700' },
         tabBarStyle: {
+          height: 72,
+          paddingTop: 6,
+          paddingBottom: 12,
           backgroundColor: theme.background,
           borderTopColor: theme.backgroundSelected,
         },

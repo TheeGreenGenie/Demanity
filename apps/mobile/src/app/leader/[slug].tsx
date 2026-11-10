@@ -4,7 +4,14 @@ import { useCallback, useEffect, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Avatar } from '@/components/avatar';
-import { BillCard, OverallCard, SampleBanner, Section, Tabs } from '@/components/civic';
+import {
+  BillCard,
+  FollowToggle,
+  OverallCard,
+  SampleBanner,
+  Section,
+  Tabs,
+} from '@/components/civic';
 import { Button, ErrorText, Field } from '@/components/form';
 import { Empty, ScoresTab } from '@/components/place-sections';
 import { Screen } from '@/components/screen';
@@ -12,7 +19,13 @@ import { timeAgo } from '@/components/social';
 import { ThemedText } from '@/components/themed-text';
 import { Brand, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { civic, describeError, type Leader, type LeaderRequest } from '@/lib/api';
+import {
+  civic,
+  describeError,
+  type Leader,
+  type LeaderRequest,
+  type RequestStatus,
+} from '@/lib/api';
 import { isFullyOnboarded, useAuth } from '@/lib/auth';
 
 type Tab = 'legislation' | 'scores' | 'requests';
@@ -48,7 +61,12 @@ export default function LeaderScreen() {
         <View style={[styles.avatarRing, { borderColor: theme.background }]}>
           <Avatar name={leader?.name ?? null} size={76} />
         </View>
-        <ThemedText type="subtitle">{leader?.name ?? ''}</ThemedText>
+        <View style={styles.nameRow}>
+          <ThemedText type="subtitle" style={styles.flex}>
+            {leader?.name ?? ''}
+          </ThemedText>
+          {leader ? <FollowToggle kind="leader" name={leader.slug} /> : null}
+        </View>
         {leader ? (
           <>
             <ThemedText themeColor="textSecondary">
@@ -79,7 +97,7 @@ export default function LeaderScreen() {
       {leader?.isSample ? (
         <SampleBanner what="this leader is a fictional person; the bills and scores are made up" />
       ) : null}
-      {leader ? <OverallCard overall={leader.overall} peerKind={leader.officeKind} /> : null}
+      {leader ? <OverallCard overall={leader.overall} /> : null}
       <View style={styles.gap} />
       <Tabs tabs={TABS} value={current} onChange={setCurrent} />
       {leader && current === 'legislation' ? <LegislationTab leader={leader} /> : null}
@@ -116,16 +134,21 @@ function RequestsTab({ leader }: { leader: Leader }) {
   const { token, me } = useAuth();
   const member = isFullyOnboarded(me) && token !== null;
   const [requests, setRequests] = useState<LeaderRequest[]>([]);
+  const [threshold, setThreshold] = useState(25);
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [titleError, setTitleError] = useState<string | undefined>();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [composing, setComposing] = useState(false);
 
   const load = useCallback(() => {
     civic
       .requests(token, leader.slug)
-      .then((r) => setRequests(r.requests))
+      .then((r) => {
+        setRequests(r.requests);
+        setThreshold(r.threshold);
+      })
       .catch((err) => setError(describeError(err)));
   }, [token, leader.slug]);
   useEffect(load, [load]);
@@ -140,6 +163,7 @@ function RequestsTab({ leader }: { leader: Leader }) {
       await civic.createRequest(token!, leader.slug, t, body.trim());
       setTitle('');
       setBody('');
+      setComposing(false);
       load();
     } catch (err) {
       setError(describeError(err));
@@ -169,32 +193,9 @@ function RequestsTab({ leader }: { leader: Leader }) {
     <View>
       <Section
         title={`What people want ${leader.name.split(' ')[0]} to do`}
-        caption="Most-wanted first · one vote per verified member"
+        caption={`Most-wanted first · one vote per verified member · at ${threshold} votes a public response is expected`}
       />
-      {leader.inOffice ? (
-        <View style={[styles.composer, { backgroundColor: theme.backgroundElement }]}>
-          <Field
-            label="Your request"
-            placeholder="e.g. Hold a town hall in every county"
-            value={title}
-            onChangeText={setTitle}
-            maxLength={140}
-            error={titleError}
-          />
-          <Field
-            label="Details (optional)"
-            value={body}
-            onChangeText={setBody}
-            multiline
-            maxLength={2000}
-          />
-          <Button
-            title={member ? 'Add request' : 'Join to add requests'}
-            onPress={submit}
-            busy={busy}
-          />
-        </View>
-      ) : null}
+
       <ErrorText message={error} />
       {requests.length === 0 ? <Empty text="No requests yet. Add the first one." /> : null}
       {requests.map((r) => (
@@ -218,6 +219,15 @@ function RequestsTab({ leader }: { leader: Leader }) {
             </ThemedText>
           </Pressable>
           <View style={styles.flex}>
+            <View style={styles.statusRow}>
+              <RequestStatusChip status={r.status} />
+              {r.awaitingResponseDays !== null ? (
+                <ThemedText type="caption" style={{ color: Brand.dislike, fontWeight: 800 }}>
+                  Awaiting response · {r.awaitingResponseDays}{' '}
+                  {r.awaitingResponseDays === 1 ? 'day' : 'days'}
+                </ThemedText>
+              ) : null}
+            </View>
             <ThemedText type="smallBold">{r.title}</ThemedText>
             {r.body ? (
               <ThemedText type="small" themeColor="textSecondary">
@@ -226,21 +236,89 @@ function RequestsTab({ leader }: { leader: Leader }) {
             ) : null}
             <ThemedText type="caption" themeColor="textSecondary">
               {r.author ? `u/${r.author.username}` : 'deleted'} · {timeAgo(r.createdAt)}
+              {r.mergedCount > 0
+                ? ` · ${r.mergedCount} duplicate${r.mergedCount === 1 ? '' : 's'} merged in`
+                : ''}
             </ThemedText>
+            {r.response ? (
+              <View style={[styles.response, { borderLeftColor: Brand.primary }]}>
+                <ThemedText type="caption" style={{ color: Brand.primary, fontWeight: 900 }}>
+                  {leader.name.toUpperCase()} RESPONDED
+                  {r.respondedAt ? ` · ${timeAgo(r.respondedAt)}` : ''}
+                </ThemedText>
+                <ThemedText type="small">{r.response}</ThemedText>
+              </View>
+            ) : null}
           </View>
         </View>
       ))}
+      {leader.inOffice && !composing ? (
+        <View style={styles.addWrap}>
+          <Button
+            title={member ? 'Add a request' : 'Join to add requests'}
+            variant="secondary"
+            onPress={() => (member ? setComposing(true) : router.push('/join'))}
+          />
+        </View>
+      ) : null}
+      {leader.inOffice && composing ? (
+        <View style={[styles.composer, { backgroundColor: theme.backgroundElement }]}>
+          <Field
+            label="Your request"
+            placeholder="e.g. Hold a town hall in every county"
+            value={title}
+            onChangeText={setTitle}
+            maxLength={140}
+            error={titleError}
+          />
+          <Field
+            label="Details (optional)"
+            value={body}
+            onChangeText={setBody}
+            multiline
+            maxLength={2000}
+          />
+          <Button
+            title={member ? 'Add request' : 'Join to add requests'}
+            onPress={submit}
+            busy={busy}
+          />
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+const STATUS: Record<RequestStatus, { label: string; color: string }> = {
+  open: { label: 'Open', color: '#8B919C' },
+  acknowledged: { label: 'Acknowledged', color: Brand.location },
+  responded: { label: 'Responded', color: Brand.primary },
+  done: { label: 'Done', color: Brand.like },
+};
+
+function RequestStatusChip({ status }: { status: RequestStatus }) {
+  const s = STATUS[status];
+  return (
+    <View style={[styles.chip, { borderColor: s.color }]}>
+      <ThemedText type="caption" style={{ color: s.color, fontWeight: 800 }}>
+        {s.label}
+      </ThemedText>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three },
+  statusRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, flexWrap: 'wrap' },
+  chip: { borderWidth: 1, borderRadius: Radius.pill, paddingHorizontal: Spacing.two },
+  response: { borderLeftWidth: 3, paddingLeft: Spacing.two, gap: 2, marginTop: Spacing.one },
   flex: { flex: 1, gap: 2 },
   banner: { height: 120, overflow: 'hidden' },
   art: { position: 'absolute', right: -10, bottom: -24 },
   header: { paddingHorizontal: Spacing.three, gap: Spacing.one },
   avatarRing: { marginTop: -42, borderWidth: 4, borderRadius: 46, alignSelf: 'flex-start' },
   gap: { height: Spacing.three },
+  addWrap: { padding: Spacing.three },
   composer: {
     margin: Spacing.three,
     padding: Spacing.three,

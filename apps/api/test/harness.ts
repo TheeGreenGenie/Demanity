@@ -73,6 +73,7 @@ export async function createHarness(): Promise<Harness> {
       vault: new HttpVaultClient('http://vault.internal', token, vaultFetch),
       challenges: new MemoryChallengeStore(),
       rp: RP,
+      cache: { versionCheckMs: 0 },
       rateLimit: {
         secret: randomBytes(32),
         routeLimits: {

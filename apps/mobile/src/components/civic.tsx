@@ -1,13 +1,24 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
-import { useState, type ComponentProps, type ReactNode } from 'react';
+import { useEffect, useState, type ComponentProps, type ReactNode } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { Avatar } from '@/components/avatar';
 import { ThemedText } from '@/components/themed-text';
 import { Brand, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import type { Bill, CategoryScore, LeaderSummary, Overall, Stat } from '@/lib/api';
+import {
+  civic,
+  social,
+  type Bill,
+  type BillStage,
+  type CategoryScore,
+  type FollowKind,
+  type LeaderSummary,
+  type Overall,
+  type Stat,
+} from '@/lib/api';
+import { isFullyOnboarded, useAuth } from '@/lib/auth';
 
 /**
  * Civic building blocks: tabs, 0-100 score badges, expandable score rows,
@@ -199,23 +210,31 @@ export function ScoreBadge({ score, size = 44 }: { score: number | null; size?: 
   );
 }
 
-/** Big overall score card with peer rank. */
-export function OverallCard({ overall, peerKind }: { overall: Overall; peerKind: string }) {
+/**
+ * Big overall card. Places get a "Conditions score" (how things are for
+ * residents); leaders get a "Trust score" (record vs. stated positions).
+ */
+export function OverallCard({ overall }: { overall: Overall }) {
   const theme = useTheme();
+  const title = overall.kind === 'conditions' ? 'Conditions score' : 'Trust score';
+  const what =
+    overall.kind === 'conditions'
+      ? 'How life here compares, from official statistics. Not a grade of the government.'
+      : 'How well their record matches their stated positions, from rated citations.';
   return (
     <View style={[styles.overall, { backgroundColor: theme.backgroundElement }]}>
       <ScoreBadge score={overall.score} size={72} />
       <View style={styles.flex}>
-        <ThemedText type="headline">Overall score</ThemedText>
+        <ThemedText type="headline">{title}</ThemedText>
         <ThemedText type="small" themeColor="textSecondary">
           {overall.score === null
             ? 'Not enough evidence yet.'
             : overall.peers
-              ? `Ranks ${overall.peers.rank} of ${overall.peers.count} ${peerWord(peerKind)} · from ${overall.categoriesCounted} categories`
+              ? `Ranks ${overall.peers.rank} of ${overall.peers.count} ${overall.peerLabel} · from ${overall.categoriesCounted} categories`
               : `From ${overall.categoriesCounted} categories`}
         </ThemedText>
         <ThemedText type="caption" themeColor="textSecondary">
-          Method under public review
+          {what} Method under public review.
         </ThemedText>
       </View>
     </View>
@@ -236,18 +255,35 @@ function ScoreBar({ score, average }: { score: number; average: number | null })
 }
 
 /** One category: tap to open the full explanation, evidence and peer comparison. */
-export function ScoreRow({ item, peerKind }: { item: CategoryScore; peerKind: string }) {
+export function ScoreRow({
+  item,
+  peerLabel,
+  subjectKind,
+}: {
+  item: CategoryScore;
+  peerLabel: string;
+  subjectKind: string;
+}) {
   const theme = useTheme();
   const [open, setOpen] = useState(false);
   const scored = item.score !== null;
+  const status = !item.applicable
+    ? `Not applicable to ${peerWord(subjectKind)}`
+    : scored
+      ? null
+      : 'Not scored yet';
   return (
     <View style={[styles.scoreRow, { borderBottomColor: theme.backgroundSelected }]}>
       <Pressable
         accessibilityRole="button"
         accessibilityState={{ expanded: open }}
-        accessibilityLabel={`${item.category.name}: ${scored ? `${item.score} out of 100` : 'not scored yet'}`}
+        accessibilityLabel={`${item.category.name}: ${scored ? `${item.score} out of 100` : status}`}
         onPress={() => setOpen((o) => !o)}
-        style={({ pressed }) => [styles.scoreHead, pressed && { opacity: 0.7 }]}
+        style={({ pressed }) => [
+          styles.scoreHead,
+          !item.applicable && { opacity: 0.55 },
+          pressed && { opacity: 0.7 },
+        ]}
       >
         <ScoreBadge score={item.score} size={40} />
         <View style={styles.flex}>
@@ -259,14 +295,14 @@ export function ScoreRow({ item, peerKind }: { item: CategoryScore; peerKind: st
               <ScoreBar score={item.score!} average={item.peers?.average ?? null} />
               <ThemedText type="caption" themeColor="textSecondary">
                 {item.peers
-                  ? `#${item.peers.rank} of ${item.peers.count} ${peerWord(peerKind)} · avg ${item.peers.average}`
+                  ? `#${item.peers.rank} of ${item.peers.count} ${peerLabel} · avg ${item.peers.average}`
                   : 'No peers scored yet'}
                 {item.lowEvidence ? ' · low evidence' : ''}
               </ThemedText>
             </>
           ) : (
             <ThemedText type="caption" themeColor="textSecondary">
-              Not scored yet
+              {status}
             </ThemedText>
           )}
         </View>
@@ -284,9 +320,8 @@ export function ScoreRow({ item, peerKind }: { item: CategoryScore; peerKind: st
               <ThemedText type="small">{item.rationale}</ThemedText>
               {item.peers ? (
                 <ThemedText type="small" themeColor="textSecondary">
-                  Compared only with other {peerWord(peerKind)}: ranks {item.peers.rank} of{' '}
-                  {item.peers.count}; the average is {item.peers.average} (the white tick on the
-                  bar).
+                  Compared only with {peerLabel}: ranks {item.peers.rank} of {item.peers.count}; the
+                  average is {item.peers.average} (the white tick on the bar).
                 </ThemedText>
               ) : null}
               <ThemedText type="smallBold">Evidence ({item.evidenceCount})</ThemedText>
@@ -316,6 +351,11 @@ export function ScoreRow({ item, peerKind }: { item: CategoryScore; peerKind: st
                 Method {item.methodVersion} · as of {item.asOf}
               </ThemedText>
             </>
+          ) : !item.applicable ? (
+            <ThemedText type="small" themeColor="textSecondary">
+              {item.category.name} is handled at a different level of government, so{' '}
+              {peerWord(subjectKind)} are never scored on it.
+            </ThemedText>
           ) : (
             <ThemedText type="small" themeColor="textSecondary">
               No evidence has been rated in this category yet, so there is no score. Scores appear
@@ -330,10 +370,61 @@ export function ScoreRow({ item, peerKind }: { item: CategoryScore; peerKind: st
 
 type ScoreSort = 'az' | 'high' | 'low';
 
-/** All 32 categories, sortable, each expandable. */
-export function ScoreList({ items, peerKind }: { items: CategoryScore[]; peerKind: string }) {
-  const [sort, setSort] = useState<ScoreSort>('az');
-  const sorted = [...items].sort((a, b) => {
+/**
+ * Category scores. Collapsed by default to the 3 strongest and 3 weakest;
+ * "See all 32" opens the full, sortable list (categories that don't apply at
+ * this level of government are listed last, unscored).
+ */
+export function ScoreList({
+  items,
+  peerLabel,
+  subjectKind,
+}: {
+  items: CategoryScore[];
+  peerLabel: string;
+  subjectKind: string;
+}) {
+  const theme = useTheme();
+  const [all, setAll] = useState(false);
+  const [sort, setSort] = useState<ScoreSort>('high');
+  const scored = items.filter((i) => i.score !== null).sort((a, b) => b.score! - a.score!);
+  const row = (s: CategoryScore) => (
+    <ScoreRow key={s.category.slug} item={s} peerLabel={peerLabel} subjectKind={subjectKind} />
+  );
+
+  if (!all) {
+    const strongest = scored.slice(0, 3);
+    const weakest = scored
+      .slice(-3)
+      .reverse()
+      .filter((s) => !strongest.includes(s));
+    return (
+      <View>
+        <SubHead title="Strongest" icon="trending-up" color={Brand.like} />
+        {strongest.map(row)}
+        {weakest.length ? (
+          <SubHead title="Weakest" icon="trending-down" color={Brand.dislike} />
+        ) : null}
+        {weakest.map(row)}
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => setAll(true)}
+          style={({ pressed }) => [
+            styles.seeAll,
+            { backgroundColor: theme.backgroundElement },
+            pressed && { opacity: 0.75 },
+          ]}
+        >
+          <ThemedText type="smallBold">See all {items.length} categories</ThemedText>
+          <Ionicons name="chevron-forward" size={16} color={theme.text} />
+        </Pressable>
+      </View>
+    );
+  }
+
+  const applicable = items.filter((i) => i.applicable);
+  const notApplicable = items.filter((i) => !i.applicable);
+  const sorted = [...applicable].sort((a, b) => {
     if (sort === 'az') return a.category.name.localeCompare(b.category.name);
     const av = a.score ?? (sort === 'high' ? -1 : 101);
     const bv = b.score ?? (sort === 'high' ? -1 : 101);
@@ -347,18 +438,88 @@ export function ScoreList({ items, peerKind }: { items: CategoryScore[]; peerKin
           value={sort}
           onChange={setSort}
           options={[
-            { key: 'az', label: 'A–Z' },
             { key: 'high', label: 'Strongest', icon: 'trending-up' },
             { key: 'low', label: 'Weakest', icon: 'trending-down' },
+            { key: 'az', label: 'A–Z' },
           ]}
         />
         <ThemedText type="caption" themeColor="textSecondary">
           Tap a category to see why it got its score.
         </ThemedText>
       </View>
-      {sorted.map((s) => (
-        <ScoreRow key={s.category.slug} item={s} peerKind={peerKind} />
-      ))}
+      {sorted.map(row)}
+      {notApplicable.length ? (
+        <SubHead
+          title={`Not applicable to ${peerWord(subjectKind)} (${notApplicable.length})`}
+          icon="remove-circle-outline"
+          color={theme.textSecondary}
+        />
+      ) : null}
+      {notApplicable.map(row)}
+      <Pressable accessibilityRole="button" onPress={() => setAll(false)} style={styles.pad}>
+        <ThemedText type="smallBold" style={{ color: Brand.primary }}>
+          Show less
+        </ThemedText>
+      </Pressable>
+    </View>
+  );
+}
+
+function SubHead({
+  title,
+  icon,
+  color,
+}: {
+  title: string;
+  icon: ComponentProps<typeof Ionicons>['name'];
+  color: string;
+}) {
+  return (
+    <View style={styles.subHead}>
+      <Ionicons name={icon} size={16} color={color} />
+      <ThemedText type="caption" style={{ color, fontWeight: 900, letterSpacing: 0.5 }}>
+        {title.toUpperCase()}
+      </ThemedText>
+    </View>
+  );
+}
+
+/** Proposed / Being voted on / Decided: the bill's place in the process. */
+export const STAGES: Record<
+  BillStage,
+  { label: string; icon: ComponentProps<typeof Ionicons>['name']; color: string; blurb: string }
+> = {
+  proposed: {
+    label: 'Proposed',
+    icon: 'bulb-outline',
+    color: Brand.primary,
+    blurb: 'Introduced, not yet acted on',
+  },
+  voting: {
+    label: 'Being voted on',
+    icon: 'hourglass-outline',
+    color: Brand.location,
+    blurb: 'In committee or moving through votes',
+  },
+  decided: {
+    label: 'Decided',
+    icon: 'archive-outline',
+    color: '#8B919C',
+    blurb: 'Signed, vetoed or failed',
+  },
+};
+
+export function StageBanner({ stage, compact = false }: { stage: BillStage; compact?: boolean }) {
+  const s = STAGES[stage];
+  return (
+    <View
+      accessibilityLabel={`Stage: ${s.label}`}
+      style={[styles.stage, { backgroundColor: s.color }, compact && styles.stageCompact]}
+    >
+      <Ionicons name={s.icon} size={compact ? 12 : 15} color="#fff" />
+      <ThemedText type="caption" style={styles.stageText}>
+        {s.label.toUpperCase()}
+      </ThemedText>
     </View>
   );
 }
@@ -383,7 +544,7 @@ export function formatStat(value: number, unit: Stat['unit']): string {
 }
 
 /** Quality-of-life statistic, compared with the median of the same kind of place. */
-export function StatCard({ stat, peerKind }: { stat: Stat; peerKind: string }) {
+export function StatCard({ stat, peerLabel }: { stat: Stat; peerLabel: string }) {
   const theme = useTheme();
   let compare: ReactNode = null;
   if (stat.peerMedian !== null && stat.peerMedian !== 0 && stat.peerCount > 1) {
@@ -400,7 +561,7 @@ export function StatCard({ stat, peerKind }: { stat: Stat; peerKind: string }) {
         />
         <ThemedText type="caption" style={{ color, fontWeight: 700 }}>
           {flat ? 'About' : `${Math.abs(diff).toFixed(0)}% ${diff > 0 ? 'above' : 'below'}`} the
-          median of {stat.peerCount} {peerWord(peerKind)}
+          median of {stat.peerCount} {peerLabel}
         </ThemedText>
       </View>
     );
@@ -420,11 +581,11 @@ export function StatCard({ stat, peerKind }: { stat: Stat; peerKind: string }) {
   );
 }
 
-export function StatGrid({ stats, peerKind }: { stats: Stat[]; peerKind: string }) {
+export function StatGrid({ stats, peerLabel }: { stats: Stat[]; peerLabel: string }) {
   return (
     <View style={styles.statGrid}>
       {stats.map((s) => (
-        <StatCard key={s.key} stat={s} peerKind={peerKind} />
+        <StatCard key={s.key} stat={s} peerLabel={peerLabel} />
       ))}
     </View>
   );
@@ -466,7 +627,13 @@ export function BillCard({ bill }: { bill: Bill }) {
         pressed && { opacity: 0.75 },
       ]}
     >
+      {bill.reason ? (
+        <ThemedText type="caption" themeColor="textSecondary">
+          {bill.reason}
+        </ThemedText>
+      ) : null}
       <View style={styles.billMeta}>
+        <StageBanner stage={bill.stage} compact />
         <StatusChip status={bill.status} />
         <ThemedText type="caption" themeColor="textSecondary">
           {bill.number} · {bill.place.name}
@@ -520,6 +687,58 @@ export function LeaderRow({ leader }: { leader: LeaderSummary }) {
 export const STANCE_PRIVACY =
   'Private by design: Demanity records that you weighed in, not which way. Your choice is only added to an anonymous total, and it can�t be changed.';
 
+/**
+ * Follow button for leaders, places and bills. Fetches its own state, since
+ * the pages it sits on are cached and identical for every viewer.
+ */
+export function FollowToggle({ kind, name }: { kind: FollowKind; name: string }) {
+  const router = useRouter();
+  const theme = useTheme();
+  const { token, me } = useAuth();
+  const [on, setOn] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    civic
+      .followStatus(token, kind, name)
+      .then((r) => !cancelled && setOn(r.following))
+      .catch(() => !cancelled && setOn(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [token, kind, name]);
+  const following = on === true;
+  async function press() {
+    if (!isFullyOnboarded(me) || !token) return router.push('/join');
+    const next = !following;
+    setOn(next);
+    try {
+      if (next) await social.follow(token, kind, name);
+      else await social.unfollow(token, kind, name);
+    } catch {
+      setOn(!next);
+    }
+  }
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ selected: following }}
+      onPress={press}
+      style={({ pressed }) => [
+        styles.follow,
+        following
+          ? { borderWidth: 1, borderColor: theme.backgroundSelected }
+          : { backgroundColor: theme.text },
+        pressed && { opacity: 0.8 },
+      ]}
+    >
+      <ThemedText type="smallBold" style={following ? undefined : { color: theme.background }}>
+        {following ? 'Following' : 'Follow'}
+      </ThemedText>
+    </Pressable>
+  );
+}
+
 /** How members weighed in (shown only after you have). */
 export function TallyBar({ tally }: { tally: { support: number; oppose: number } }) {
   const theme = useTheme();
@@ -552,6 +771,39 @@ export function TallyBar({ tally }: { tally: { support: number; oppose: number }
 }
 
 const styles = StyleSheet.create({
+  follow: {
+    borderRadius: Radius.pill,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
+    alignSelf: 'flex-start',
+  },
+  seeAll: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    margin: Spacing.three,
+    padding: Spacing.three,
+    borderRadius: Radius.medium,
+  },
+  subHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.one + 2,
+    paddingHorizontal: Spacing.three,
+    paddingTop: Spacing.three,
+    paddingBottom: Spacing.one,
+  },
+  stage: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-start',
+    borderRadius: Radius.small,
+    paddingHorizontal: Spacing.two,
+    paddingVertical: 4,
+  },
+  stageCompact: { paddingHorizontal: 6, paddingVertical: 2, gap: 4 },
+  stageText: { color: '#fff', fontWeight: 900, letterSpacing: 0.5 },
   tally: { gap: Spacing.one + 2 },
   tallyLabels: { flexDirection: 'row', justifyContent: 'space-between' },
   tallyBar: { height: 10, borderRadius: 5, overflow: 'hidden' },

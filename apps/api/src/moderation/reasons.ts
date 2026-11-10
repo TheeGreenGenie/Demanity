@@ -26,6 +26,13 @@ export const REASON_CODES = {
     'doxxing',
     'other_policy_violation',
   ],
+  // Leader requests (docs/LEGISLATION.md �3b).
+  request: [
+    'leader_action_documented',
+    'duplicate_request',
+    'not_a_request',
+    'other_policy_violation',
+  ],
   recovery: {
     approve: ['ownership_plausible'],
     deny: ['ownership_not_established', 'suspected_takeover'],

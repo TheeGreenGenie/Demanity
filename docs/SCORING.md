@@ -92,6 +92,16 @@ score = 50 + 50 × Σ x_i / ( Σ |x_i| + k ),    k = 5
 
 > *Correction note:* an earlier plan draft wrote the denominator as `Σ|w·decay·gate|`, without `s`. That doesn't reproduce the 61/100 example. The denominator is `Σ|x_i|`, as above.
 
+## 3a. Which categories apply, and conditions vs. trust (proposal, REVIEW BEFORE RELEASE)
+- **Scored only where it applies.** Each policy area is mapped to the levels of government that act on it: federal, state, local or judicial. These mappings are kept as reference data (`category_levels`), so they can be changed later.
+  - A subject is scored only in categories that apply at its level. Mayors are never scored on foreign policy or the armed forces, and cities are never scored on international affairs.
+  - Those categories still appear in the list as "Not applicable", and the overall score ignores them.
+  - Current draft mapping: federal covers all 32. State excludes Congress, International Affairs, and Foreign Trade & International Finance. Local additionally excludes Armed Forces & National Security, Immigration, and Finance & Financial Sector. Judicial covers Law, Crime & Law Enforcement, Civil Rights & Liberties, and Immigration.
+- **Two different scores, labeled differently.**
+  - **Leaders get a Trust score:** how well their record matches their stated positions, built from rated citations (§2–§3).
+  - **Places get a Conditions score:** how life there compares with similar places, built from official statistics ([LOCATIONS.md §5](LOCATIONS.md)). A conditions score is *not* a grade of that place's government.
+- **Peers.** Leaders are compared with holders of the same office. Places are compared with the same kind of place of similar size ([LOCATIONS.md §5](LOCATIONS.md)).
+
 ## 4. Overall score, alignment, help/hurt: ⚠️ REVIEW BEFORE RELEASE
 **Status: NOT FINALIZED (R31).** This is a research-based proposal. It is not important for the MVP, but it matters in practice and must be validated before first release.
 

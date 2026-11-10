@@ -5,6 +5,7 @@ import { REASON_CODES } from '../moderation/reasons.js';
 import { isModerator, logAction } from '../moderation/service.js';
 import type { RouteLimits } from '../rate-limit.js';
 import { queries, type PostSort } from '../social/queries.js';
+import { billSelect, billView, RELEVANCE_SQL, type BillRow } from './civic.js';
 
 /**
  * Social core (R5, R8, R15, R16, R18). Guests can read everything; writing
@@ -297,8 +298,8 @@ export async function socialRoutes(
     type: 'object',
     required: ['kind', 'name'],
     properties: {
-      kind: { type: 'string', enum: ['community', 'user'] },
-      name: { type: 'string', maxLength: 60 },
+      kind: { type: 'string', enum: ['community', 'user', 'leader', 'place', 'bill'] },
+      name: { type: 'string', maxLength: 80 },
     },
   } as const;
 
@@ -310,12 +311,30 @@ export async function socialRoutes(
       const c = await communityBySlug(pool, name);
       return c ? { type: 'community', id: c.id } : null;
     }
-    const { rows } = await pool.query<{ id: string }>(
-      "SELECT id FROM accounts WHERE username = $1 AND status = 'active'",
-      [name],
-    );
-    return rows[0] ? { type: 'account', id: rows[0].id } : null;
+    const sql: Record<string, [string, string]> = {
+      user: ['account', "SELECT id FROM accounts WHERE username = $1 AND status = 'active'"],
+      leader: ['leader', 'SELECT id FROM leaders WHERE slug = $1'],
+      place: ['place', 'SELECT id FROM places WHERE slug = $1'],
+      bill: ['bill', "SELECT id FROM bills WHERE id::text = $1 AND $1 ~ '^[0-9a-f-]{36}$'"],
+    };
+    const [type, query] = sql[kind]!;
+    const { rows } = await pool.query<{ id: string }>(query, [name]);
+    return rows[0] ? { type, id: rows[0].id } : null;
   }
+
+  // Whether the viewer follows something (kept separate so public pages can be cached).
+  app.get('/v1/follows/:kind/:name', { schema: { params: followParams } }, async (req, reply) => {
+    const { kind, name } = req.params as { kind: string; name: string };
+    const target = await followTarget(kind, name);
+    if (!target) return notFound(reply);
+    const me = viewer(req);
+    if (!me) return { following: false };
+    const { rowCount } = await pool.query(
+      'SELECT 1 FROM follows WHERE follower_id = $1 AND target_type = $2 AND target_id = $3',
+      [me, target.type, target.id],
+    );
+    return { following: (rowCount ?? 0) > 0 };
+  });
 
   app.put(
     '/v1/follows/:kind/:name',
@@ -352,9 +371,42 @@ export async function socialRoutes(
 
   // --- Feed and profiles -----------------------------------------------------------
 
-  app.get('/v1/feed', { preHandler: member, schema: { querystring: cursorQuery } }, async (req) =>
-    queries.feed(pool, req.session!.accountId, (req.query as { cursor?: string }).cursor),
-  );
+  /**
+   * Feed: posts from followed communities and people (paged), plus, on the
+   * first page only, recent bill activity from followed leaders, places, bills
+   * and topics, and the list of followed leaders, places and bills. Each
+   * update carries the reason it is shown.
+   */
+  app.get('/v1/feed', { preHandler: member, schema: { querystring: cursorQuery } }, async (req) => {
+    const me = req.session!.accountId;
+    const cursor = (req.query as { cursor?: string }).cursor;
+    const page = await queries.feed(pool, me, cursor);
+    if (cursor) return page;
+    const [updates, following] = await Promise.all([
+      pool.query<BillRow>(
+        `SELECT * FROM (${billSelect(`, ${RELEVANCE_SQL} AS reason`)}
+           WHERE b.last_action_at >= CURRENT_DATE - 60) y
+          WHERE y.reason IS NOT NULL ORDER BY y.last_action_at DESC, y.id DESC LIMIT 10`,
+        [me],
+      ),
+      pool.query(
+        `SELECT 'leader' AS kind, l.slug AS id, l.name, l.office AS caption
+           FROM follows f JOIN leaders l ON l.id = f.target_id
+          WHERE f.follower_id = $1 AND f.target_type = 'leader'
+         UNION ALL
+         SELECT 'place', p.slug, p.name, p.kind
+           FROM follows f JOIN places p ON (f.target_type = 'place' AND p.id = f.target_id)
+                                        OR (f.target_type = 'community' AND p.community_id = f.target_id)
+          WHERE f.follower_id = $1
+         UNION ALL
+         SELECT 'bill', b.id::text, b.title, b.number
+           FROM follows f JOIN bills b ON b.id = f.target_id
+          WHERE f.follower_id = $1 AND f.target_type = 'bill'`,
+        [me],
+      ),
+    ]);
+    return { ...page, updates: updates.rows.map(billView), following: following.rows };
+  });
 
   app.get(
     '/v1/users/:username',

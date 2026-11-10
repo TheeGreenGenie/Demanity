@@ -32,12 +32,16 @@ test('guests explore a state: overview, scores with explanations, cost of living
   await expect(visible(page, /Sample data for design only/).first()).toBeVisible();
 
   await tab(page, 'Scores').click();
-  await expect(visible(page, 'Scores in all 32 categories')).toBeVisible();
+  await expect(visible(page, 'Conditions by category')).toBeVisible();
+  await expect(visible(page, 'Conditions score').first()).toBeVisible();
+  await button(page, /^See all 32 categories/).click();
   await button(page, /^Health:/).click();
   await expect(visible(page, /^Why \d+\/100$/)).toBeVisible();
-  await expect(visible(page, /Compared only with other states/)).toBeVisible();
+  await expect(visible(page, /Compared only with states/)).toBeVisible();
 
   await tab(page, 'Cost of living').click();
+  await expect(visible(page, 'MONTHLY BASICS, ONE ADULT')).toBeVisible();
+  await button(page, /^Monthly basics/).click();
   await expect(visible(page, 'Groceries, one adult')).toBeVisible();
   await expect(visible(page, /median of 5 states/).first()).toBeVisible();
 
@@ -79,6 +83,7 @@ test('members swipe on bills privately and request things from leaders', async (
     .click();
   await tab(page, 'Requests').click();
   const ask = `Publish meeting notes ${randomBytes(2).toString('hex')}`;
+  await button(page, 'Add a request').click();
   await page.getByLabel('Your request').fill(ask);
   await button(page, 'Add request').click();
   await expect(visible(page, ask)).toBeVisible();

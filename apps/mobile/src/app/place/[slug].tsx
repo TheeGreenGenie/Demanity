@@ -3,7 +3,7 @@ import { Redirect, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { peerWord, Tabs } from '@/components/civic';
+import { FollowToggle, peerWord, Tabs } from '@/components/civic';
 import { ErrorText } from '@/components/form';
 import { CommunityIcon } from '@/components/forum';
 import { PLACE_TABS, PlaceTabContent, usePlace, type PlaceTab } from '@/components/place-sections';
@@ -43,11 +43,18 @@ export default function PlaceScreen() {
         <View style={[styles.iconRing, { borderColor: theme.background }]}>
           <CommunityIcon kind="location" size={64} />
         </View>
-        <ThemedText type="subtitle">{place?.name ?? ''}</ThemedText>
+        <View style={styles.nameRow}>
+          <ThemedText type="subtitle" style={styles.flex}>
+            {place?.name ?? ''}
+          </ThemedText>
+          {place ? <FollowToggle kind="place" name={place.slug} /> : null}
+        </View>
         {place ? (
           <ThemedText type="caption" themeColor="textSecondary">
             {peerWord(place.kind, false)[0]!.toUpperCase() + peerWord(place.kind, false).slice(1)}
             {place.parent ? ` in ${place.parent.name}` : ''}
+            {place.population ? ` · about ${place.population.toLocaleString('en-US')} people` : ''}
+            {` · compared with ${place.peerLabel}`}
           </ThemedText>
         ) : null}
       </View>
@@ -59,6 +66,8 @@ export default function PlaceScreen() {
 }
 
 const styles = StyleSheet.create({
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three },
+  flex: { flex: 1 },
   banner: { height: 120, overflow: 'hidden' },
   art: { position: 'absolute', right: -10, bottom: -24 },
   header: { paddingHorizontal: Spacing.three, gap: Spacing.one, paddingBottom: Spacing.two },

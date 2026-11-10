@@ -127,7 +127,7 @@ export const social = {
       { token },
     ),
   feed: (token: string, cursor?: string | null) =>
-    request<Page<Post>>('GET', `/v1/feed${q(cursor)}`, { token }),
+    request<Feed>('GET', `/v1/feed${q(cursor)}`, { token }),
   post: (token: string | null, id: string) => request<Post>('GET', `/v1/posts/${id}`, { token }),
   comments: (token: string | null, id: string) =>
     request<{ comments: Comment[] }>('GET', `/v1/posts/${id}/comments`, { token }),
@@ -142,9 +142,9 @@ export const social = {
     request<void>('PUT', '/v1/reactions', { token, body: { targetType, targetId, kind } }),
   unreact: (token: string, targetType: 'post' | 'comment', targetId: string) =>
     request<void>('DELETE', '/v1/reactions', { token, body: { targetType, targetId } }),
-  follow: (token: string, kind: 'community' | 'user', name: string) =>
+  follow: (token: string, kind: FollowKind, name: string) =>
     request<void>('PUT', `/v1/follows/${kind}/${name}`, { token }),
-  unfollow: (token: string, kind: 'community' | 'user', name: string) =>
+  unfollow: (token: string, kind: FollowKind, name: string) =>
     request<void>('DELETE', `/v1/follows/${kind}/${name}`, { token }),
   user: (token: string | null, username: string) =>
     request<Profile>('GET', `/v1/users/${username}`, { token }),
@@ -156,15 +156,21 @@ export type PlaceKind =
   'nation' | 'state' | 'county' | 'city' | 'court_district' | 'congressional_district';
 
 export interface Overall {
+  /** Places: living conditions. Leaders: trust (record vs. stated positions). */
+  kind: 'conditions' | 'trust';
   score: number | null;
   categoriesCounted: number;
   categoriesExcluded: number;
   peers: { rank: number; count: number } | null;
+  peerGroup: string;
+  peerLabel: string;
   method: string;
 }
 
 export interface CategoryScore {
   category: { slug: string; name: string };
+  /** False when the category doesn't apply at this level of government (never scored). */
+  applicable: boolean;
   score: number | null;
   rationale: string | null;
   evidence: { label: string; url: string | null }[];
@@ -177,6 +183,9 @@ export interface CategoryScore {
 }
 
 export interface Scores {
+  kind: 'conditions' | 'trust';
+  subjectKind: string;
+  peerLabel: string;
   peerGroup: string;
   overall: Overall;
   categories: CategoryScore[];
@@ -191,12 +200,28 @@ export interface LeaderSummary {
   overall: number | null;
 }
 
+export type BillStage = 'proposed' | 'voting' | 'decided';
+
+export interface BillFilter {
+  scope?: 'federal' | 'state';
+  place?: string;
+  category?: string;
+  stage?: BillStage;
+  bipartisan?: boolean;
+}
+
 export interface Bill {
   id: string;
   number: string;
   title: string;
   summary: string;
+  /** Plain-language "what changes for you". */
+  impact: string;
   status: string;
+  stage: BillStage;
+  level: 'federal' | 'state';
+  /** Deck and feed only: why this bill is shown to you. */
+  reason?: string;
   introducedAt: string;
   lastActionAt: string;
   sourceUrl: string | null;
@@ -227,6 +252,17 @@ export interface Place {
   slug: string;
   name: string;
   kind: PlaceKind;
+  population: number | null;
+  peerGroup: string;
+  peerLabel: string;
+  cost: {
+    basicsMonthly: number;
+    peerMedian: number | null;
+    peerCount: number | null;
+    realIncome: number | null;
+    gallonsPerMonth: number;
+    formula: string;
+  } | null;
   isSample: boolean;
   parent: { slug: string; name: string } | null;
   community: string | null;
@@ -243,6 +279,8 @@ export interface Place {
     categoryName: string | null;
   }[];
   elections: {
+    id: string;
+    candidates: number;
     office: string;
     kind: string;
     electionDate: string;
@@ -256,6 +294,7 @@ export interface Place {
 }
 
 export interface Leader {
+  claimed: boolean;
   slug: string;
   name: string;
   office: string;
@@ -270,10 +309,18 @@ export interface Leader {
   sponsored: Bill[];
 }
 
+export type RequestStatus = 'open' | 'acknowledged' | 'responded' | 'done';
+
 export interface LeaderRequest {
   id: string;
   title: string;
   body: string;
+  status: RequestStatus;
+  response: string | null;
+  respondedAt: string | null;
+  mergedCount: number;
+  /** Days since the request reached the must-respond threshold without an answer. */
+  awaitingResponseDays: number | null;
   createdAt: string;
   author: { username: string } | null;
   votes: number;
@@ -302,6 +349,51 @@ export interface SearchResults {
   posts: { id: string; title: string; communitySlug: string; communityName: string }[];
 }
 
+export interface Election {
+  id: string;
+  office: string;
+  kind: string;
+  electionDate: string;
+  sourceLabel: string;
+  sourceUrl: string | null;
+  isSample: boolean;
+  place: { slug: string; name: string };
+  voted: boolean;
+  closed: boolean;
+  total: number | null;
+  candidates: {
+    id: string;
+    name: string;
+    party: string;
+    leaderSlug: string | null;
+    votes: number | null;
+    actualPct: number | null;
+  }[];
+  meanAbsoluteErrorPoints: number | null;
+}
+
+export type FollowKind = 'community' | 'user' | 'leader' | 'place' | 'bill';
+
+export interface FollowedItem {
+  kind: 'leader' | 'place' | 'bill';
+  id: string;
+  name: string;
+  caption: string;
+}
+
+export interface Feed extends Page<Post> {
+  updates?: Bill[];
+  following?: FollowedItem[];
+}
+
+const billQuery = (f: BillFilter) => {
+  const params = new URLSearchParams();
+  for (const [k, v] of Object.entries(f))
+    if (v !== undefined && v !== false) params.set(k, String(v));
+  const qs = params.toString();
+  return qs ? `?${qs}` : '';
+};
+
 export const civic = {
   place: (token: string | null, slug: string) =>
     request<Place>('GET', `/v1/places/${slug}`, { token }),
@@ -312,7 +404,11 @@ export const civic = {
   leaderScores: (token: string | null, slug: string) =>
     request<Scores>('GET', `/v1/leaders/${slug}/scores`, { token }),
   requests: (token: string | null, slug: string) =>
-    request<{ requests: LeaderRequest[] }>('GET', `/v1/leaders/${slug}/requests`, { token }),
+    request<{ threshold: number; requests: LeaderRequest[] }>(
+      'GET',
+      `/v1/leaders/${slug}/requests`,
+      { token },
+    ),
   createRequest: (token: string, slug: string, title: string, body: string) =>
     request<{ id: string }>('POST', `/v1/leaders/${slug}/requests`, {
       token,
@@ -322,23 +418,26 @@ export const civic = {
     request<void>('PUT', `/v1/leader-requests/${id}/vote`, { token }),
   unvoteRequest: (token: string, id: string) =>
     request<void>('DELETE', `/v1/leader-requests/${id}/vote`, { token }),
-  bills: (
-    token: string | null,
-    filter: { place?: string; category?: string; bipartisan?: boolean } = {},
-  ) => {
-    const params = new URLSearchParams();
-    if (filter.place) params.set('place', filter.place);
-    if (filter.category) params.set('category', filter.category);
-    if (filter.bipartisan) params.set('bipartisan', 'true');
-    const qs = params.toString();
-    return request<{ bills: Bill[] }>('GET', `/v1/bills${qs ? `?${qs}` : ''}`, { token });
-  },
-  deck: (token: string) => request<{ bills: Bill[] }>('GET', '/v1/bills/deck', { token }),
+  bills: (token: string | null, filter: BillFilter = {}) =>
+    request<{ bills: Bill[] }>('GET', `/v1/bills${billQuery(filter)}`, { token }),
+  deck: (token: string, filter: BillFilter = {}) =>
+    request<{ bills: Bill[] }>('GET', `/v1/bills/deck${billQuery(filter)}`, { token }),
   bill: (token: string | null, id: string) => request<Bill>('GET', `/v1/bills/${id}`, { token }),
   stance: (token: string, id: string, stance: 'support' | 'oppose') =>
     request<{ tally: { support: number; oppose: number } }>('POST', `/v1/bills/${id}/stance`, {
       token,
       body: { stance },
+    }),
+  election: (token: string | null, id: string) =>
+    request<Election>('GET', `/v1/elections/${id}`, { token }),
+  castMockBallot: (token: string, id: string, candidateId: string) =>
+    request<{ status: string }>('POST', `/v1/elections/${id}/ballot`, {
+      token,
+      body: { candidateId, residentAttested: true },
+    }),
+  followStatus: (token: string | null, kind: FollowKind, name: string) =>
+    request<{ following: boolean }>('GET', `/v1/follows/${kind}/${encodeURIComponent(name)}`, {
+      token,
     }),
   guides: () => request<{ guides: GuideSummary[] }>('GET', '/v1/guides'),
   guide: (slug: string) => request<Guide>('GET', `/v1/guides/${slug}`),
@@ -402,6 +501,8 @@ export function describeError(err: unknown): string {
     post_removed: 'This post was removed by moderators.',
     cannot_follow_self: 'You can’t follow yourself.',
     not_found: 'That could not be found.',
+    already_voted: 'You already cast a mock ballot in this election.',
+    election_closed: 'This election has already happened.',
     already_weighed_in: 'You already weighed in on this bill. Stances can�t be changed.',
     leader_not_in_office: 'This leader is no longer in office.',
   };

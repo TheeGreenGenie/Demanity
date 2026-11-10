@@ -6,11 +6,13 @@ import { describeError, type Page, type Post } from '@/lib/api';
  * Loads a reverse-chronological list of posts with "load more" paging.
  * `key` identifies the list; when it changes, the list reloads from the top.
  */
-export function usePagedPosts(
-  fetchPage: (cursor: string | null) => Promise<Page<Post>>,
+export function usePagedPosts<P extends Page<Post>>(
+  fetchPage: (cursor: string | null) => Promise<P>,
   key: string,
 ) {
   const [posts, setPosts] = useState<Post[]>([]);
+  // The whole first page, for lists that carry extras (e.g. the feed's updates).
+  const [first, setFirst] = useState<P | null>(null);
   const [next, setNext] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -23,6 +25,7 @@ export function usePagedPosts(
       .then((page) => {
         if (cancelled) return;
         setPosts(page.posts);
+        setFirst(page);
         setNext(page.next);
         setError(null);
       })
@@ -49,6 +52,7 @@ export function usePagedPosts(
   }, [fetchPage, next]);
 
   return {
+    first,
     posts,
     loading,
     error,

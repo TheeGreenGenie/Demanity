@@ -1,23 +1,63 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Animated, PanResponder, Pressable, StyleSheet, View } from 'react-native';
+import { Animated, PanResponder, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
-import { billStatus, SampleBanner, STANCE_PRIVACY, StatusChip, TallyBar } from '@/components/civic';
+import {
+  billStatus,
+  Chips,
+  SampleBanner,
+  STAGES,
+  StageBanner,
+  STANCE_PRIVACY,
+  StatusChip,
+  TallyBar,
+} from '@/components/civic';
 import { Button, ErrorText } from '@/components/form';
 import { Screen } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
 import { Brand, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { ApiError, civic, describeError, type Bill } from '@/lib/api';
+import {
+  ApiError,
+  civic,
+  describeError,
+  social,
+  type Bill,
+  type BillFilter,
+  type BillStage,
+  type Community,
+} from '@/lib/api';
 import { isFullyOnboarded, useAuth } from '@/lib/auth';
+import { stanceStore } from '@/lib/stance-store';
 
 type Stance = 'support' | 'oppose';
 const THRESHOLD = 110;
 
+const LEVELS = [
+  { key: 'all', label: 'All' },
+  { key: 'federal', label: 'Federal' },
+  { key: 'state', label: 'State' },
+] as const;
+const STATES = [
+  { key: 'all', label: 'All states' },
+  { key: 'california', label: 'CA' },
+  { key: 'texas', label: 'TX' },
+  { key: 'florida', label: 'FL' },
+  { key: 'new-york', label: 'NY' },
+  { key: 'pennsylvania', label: 'PA' },
+] as const;
+const STAGE_OPTIONS = [
+  { key: 'all', label: 'Any stage' },
+  { key: 'proposed', label: STAGES.proposed.label, icon: STAGES.proposed.icon },
+  { key: 'voting', label: STAGES.voting.label, icon: STAGES.voting.icon },
+  { key: 'decided', label: STAGES.decided.label, icon: STAGES.decided.icon },
+] as const;
+
 /**
  * Legislation swipe deck: swipe right to support, left to oppose (or use the
- * buttons). One stance per bill, private by design, results shown after.
+ * buttons). Bills most relevant to you come first, each saying why. Filter by
+ * level, state, stage and topic. One stance per bill, private by design.
  */
 export default function BillsScreen() {
   const router = useRouter();
@@ -30,18 +70,43 @@ export default function BillsScreen() {
     null,
   );
   const [nudge, setNudge] = useState(false);
+  const [level, setLevel] = useState<'all' | 'federal' | 'state'>('all');
+  const [state, setState] = useState<string>('all');
+  const [stage, setStage] = useState<'all' | BillStage>('all');
+  const [topic, setTopic] = useState<string>('all');
+  const [topics, setTopics] = useState<Community[]>([]);
+  const [showTopics, setShowTopics] = useState(false);
+
+  useEffect(() => {
+    social
+      .communities(null, 'topic')
+      .then((r) => setTopics(r.communities))
+      .catch(() => undefined);
+  }, []);
+
+  const filter: BillFilter = useMemo(() => {
+    const f: BillFilter = {};
+    if (level !== 'all') f.scope = level;
+    if (level === 'state' && state !== 'all') f.place = state;
+    if (stage !== 'all') f.stage = stage;
+    if (topic !== 'all') f.category = topic;
+    return f;
+  }, [level, state, stage, topic]);
 
   useEffect(() => {
     if (!ready) return;
-    const load = member ? civic.deck(token!) : civic.bills(null);
-    load.then((r) => setDeck(r.bills)).catch((err) => setError(describeError(err)));
-  }, [ready, member, token]);
+    let cancelled = false;
+    const load = member ? civic.deck(token!, filter) : civic.bills(null, filter);
+    load
+      .then((r) => !cancelled && (setDeck(r.bills), setError(null)))
+      .catch((err) => !cancelled && setError(describeError(err)));
+    return () => {
+      cancelled = true;
+    };
+  }, [ready, member, token, filter]);
 
   const top = deck?.[0] ?? null;
   const next = deck?.[1] ?? null;
-
-  // Animated values live in state (created once); the responder is rebuilt
-  // only when the card on top or the viewer changes.
   const [pan] = useState(() => new Animated.ValueXY());
 
   const commit = useCallback(
@@ -63,7 +128,10 @@ export default function BillsScreen() {
       });
       civic
         .stance(token!, bill.id, stance)
-        .then(({ tally }) => setLast({ bill, stance, tally }))
+        .then(({ tally }) => {
+          void stanceStore.set(bill.id, stance); // remembered on this device only
+          setLast({ bill, stance, tally });
+        })
         .catch((err) => {
           if (!(err instanceof ApiError && err.code === 'already_weighed_in'))
             setError(describeError(err));
@@ -72,9 +140,7 @@ export default function BillsScreen() {
     [pan, token, top, member],
   );
 
-  const skip = () => {
-    setDeck((d) => (d && d.length > 1 ? [...d.slice(1), d[0]!] : d));
-  };
+  const skip = () => setDeck((d) => (d && d.length > 1 ? [...d.slice(1), d[0]!] : d));
 
   const responder = useMemo(
     () =>
@@ -105,12 +171,53 @@ export default function BillsScreen() {
     outputRange: [1, 0],
     extrapolate: 'clamp',
   });
+  const topicName = topics.find((t) => t.slug === topic)?.name;
 
   return (
     <Screen
-      title="Legislation"
+      title="Bills"
       subtitle="Swipe right to support, left to oppose. Tap a card for details."
     >
+      <View style={styles.filters}>
+        <Chips label="Level" options={LEVELS} value={level} onChange={setLevel} />
+        {level === 'state' ? (
+          <Chips label="State" options={STATES} value={state} onChange={setState} />
+        ) : null}
+        <Chips label="Stage" options={STAGE_OPTIONS} value={stage} onChange={setStage} />
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ expanded: showTopics }}
+          onPress={() => setShowTopics((s) => !s)}
+          style={[styles.topicButton, { backgroundColor: theme.backgroundElement }]}
+        >
+          <Ionicons name="pricetags-outline" size={14} color={theme.text} />
+          <ThemedText type="caption" style={styles.bold}>
+            {topic === 'all' ? 'All topics' : topicName}
+          </ThemedText>
+          <Ionicons
+            name={showTopics ? 'chevron-up' : 'chevron-down'}
+            size={14}
+            color={theme.text}
+          />
+        </Pressable>
+        {showTopics ? (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <Chips
+              label="Topic"
+              value={topic}
+              onChange={(t) => {
+                setTopic(t);
+                setShowTopics(false);
+              }}
+              options={[
+                { key: 'all', label: 'All topics' },
+                ...topics.map((t) => ({ key: t.slug, label: t.name })),
+              ]}
+            />
+          </ScrollView>
+        ) : null}
+      </View>
+
       {deck?.some((b) => b.isSample) ? <SampleBanner what="these bills are made up" /> : null}
       <ErrorText message={error} />
 
@@ -130,7 +237,7 @@ export default function BillsScreen() {
             <Ionicons name="checkmark-done-circle" size={56} color={Brand.like} />
             <ThemedText type="headline">You’re all caught up</ThemedText>
             <ThemedText type="small" themeColor="textSecondary" style={styles.center}>
-              New bills appear here as they’re introduced.
+              No bills match these filters. Try another stage or topic.
             </ThemedText>
           </View>
         ) : null}
@@ -207,7 +314,7 @@ export default function BillsScreen() {
       <View style={styles.privacy}>
         <Ionicons name="lock-closed" size={13} color={theme.textSecondary} />
         <ThemedText type="caption" themeColor="textSecondary" style={styles.flex}>
-          {STANCE_PRIVACY}
+          {STANCE_PRIVACY} Your own choices are remembered on this device only.
         </ThemedText>
       </View>
     </Screen>
@@ -215,10 +322,12 @@ export default function BillsScreen() {
 }
 
 function CardBody({ bill }: { bill: Bill }) {
+  const theme = useTheme();
   const sponsor = bill.sponsors.find((s) => s.role === 'sponsor');
   return (
     <View style={styles.body}>
       <View style={styles.meta}>
+        <StageBanner stage={bill.stage} />
         <StatusChip status={bill.status} />
         {bill.bipartisan ? (
           <ThemedText type="caption" style={{ color: Brand.humanity, fontWeight: 800 }}>
@@ -226,14 +335,32 @@ function CardBody({ bill }: { bill: Bill }) {
           </ThemedText>
         ) : null}
       </View>
+      {bill.reason ? (
+        <View style={styles.reason}>
+          <Ionicons name="sparkles" size={13} color={Brand.primary} />
+          <ThemedText type="caption" style={{ color: Brand.primary, fontWeight: 800 }}>
+            {bill.reason}
+          </ThemedText>
+        </View>
+      ) : null}
       <ThemedText type="caption" themeColor="textSecondary">
-        {bill.number} · {bill.place.name}
+        {bill.level === 'federal' ? 'Federal' : 'State'} · {bill.number} · {bill.place.name}
       </ThemedText>
       <ThemedText style={styles.title}>{bill.title}</ThemedText>
-      <ThemedText themeColor="textSecondary">{bill.summary}</ThemedText>
+      <ThemedText themeColor="textSecondary" numberOfLines={3}>
+        {bill.summary}
+      </ThemedText>
+      {bill.impact ? (
+        <View style={[styles.impact, { backgroundColor: theme.backgroundElement }]}>
+          <ThemedText type="caption" style={{ color: Brand.primary, fontWeight: 900 }}>
+            WHAT CHANGES FOR YOU
+          </ThemedText>
+          <ThemedText type="small">{bill.impact}</ThemedText>
+        </View>
+      ) : null}
       <View style={styles.footer}>
         {bill.category ? (
-          <ThemedText type="caption" style={{ fontWeight: 800 }}>
+          <ThemedText type="caption" style={styles.bold}>
             c/{bill.category.slug}
           </ThemedText>
         ) : null}
@@ -287,8 +414,19 @@ function RoundButton({
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  bold: { fontWeight: 800 },
   center: { textAlign: 'center' },
-  deck: { height: 420, marginTop: Spacing.two },
+  filters: { gap: Spacing.two },
+  topicButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-start',
+    borderRadius: Radius.pill,
+    paddingHorizontal: Spacing.three - 4,
+    paddingVertical: Spacing.one + 2,
+  },
+  deck: { height: 480, marginTop: Spacing.two },
   card: {
     position: 'absolute',
     top: 0,
@@ -302,9 +440,11 @@ const styles = StyleSheet.create({
   behind: { transform: [{ scale: 0.95 }, { translateY: 14 }], opacity: 0.7 },
   done: { alignItems: 'center', justifyContent: 'center', gap: Spacing.two, padding: Spacing.four },
   body: { padding: Spacing.four, gap: Spacing.two },
-  meta: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
+  meta: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, flexWrap: 'wrap' },
+  reason: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   title: { fontSize: 26, lineHeight: 31, fontWeight: 900 },
-  footer: { gap: 4, marginTop: Spacing.two },
+  impact: { borderRadius: Radius.medium, padding: Spacing.three - 4, gap: 2 },
+  footer: { gap: 4, marginTop: Spacing.one },
   stamp: {
     position: 'absolute',
     top: Spacing.four,

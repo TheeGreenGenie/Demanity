@@ -2,7 +2,7 @@ import type { InjectOptions } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { clearSampleData, seedSampleCivic } from '../dev/seed-sample-civic.js';
 import { assertNoDevSeedData } from '../src/dev-seed-guard.js';
-import { bearer, createHarness, onboard, signIn, type Harness } from './harness.js';
+import { bearer, createHarness, moderator, onboard, signIn, type Harness } from './harness.js';
 
 let h: Harness;
 let alice: string;
@@ -60,7 +60,7 @@ describe('places', () => {
 
   it('scores all 32 categories with explanations, compared only with the same kind of place', async () => {
     const city = (await call('GET', '/v1/places/austin-tx/scores')).json();
-    expect(city.peerGroup).toBe('city');
+    expect(city.peerGroup).toBe('city:large');
     expect(city.categories).toHaveLength(32);
     const health = city.categories.find(
       (c: { category: { slug: string } }) => c.category.slug === 'health',
@@ -68,7 +68,8 @@ describe('places', () => {
     expect(health.score).toBeGreaterThanOrEqual(0);
     expect(health.score).toBeLessThanOrEqual(100);
     expect(health.rationale).toMatch(/SAMPLE EXPLANATION/);
-    expect(health.peers.count).toBe(8); // 8 sample cities
+    expect(health.peers.count).toBe(4); // similar-size peers: sample cities with 250k-1M people
+    expect(city.peerLabel).toBe('cities with 250k–1M people');
     expect(health.peers.rank).toBeGreaterThanOrEqual(1);
     const state = (await call('GET', '/v1/places/texas/scores')).json();
     expect(state.categories[0].peers.count).toBe(5);
@@ -96,7 +97,7 @@ describe('leaders', () => {
     expect(Array.isArray(l.passed)).toBe(true);
     expect(Array.isArray(l.sponsored)).toBe(true);
     const s = (await call('GET', `/v1/leaders/${slug}/scores`)).json();
-    expect(s.peerGroup).toBe('us_senate');
+    expect(s.peerGroup).toBe('leader:us_senate');
     expect(s.categories).toHaveLength(32);
     const scored = s.categories.filter((c: { score: number | null }) => c.score !== null);
     expect(scored.length).toBeGreaterThan(0);
@@ -206,6 +207,218 @@ describe('Humanity guides', () => {
     const g = (await call('GET', '/v1/guides/how-a-bill-becomes-law')).json();
     expect(g.body).toMatch(/committee/);
     expect(g.sources[0].url).toMatch(/^https:\/\/www\.usa\.gov\//);
+  });
+});
+
+describe('applicability and conditions vs. trust', () => {
+  it('never scores categories that do not apply to the level of government', async () => {
+    const city = (await call('GET', '/v1/places/austin-tx/scores')).json();
+    expect(city.kind).toBe('conditions');
+    const foreign = city.categories.find(
+      (c: { category: { slug: string } }) => c.category.slug === 'international-affairs',
+    );
+    expect(foreign).toMatchObject({ applicable: false, score: null, peers: null });
+    const nation = (await call('GET', '/v1/places/united-states/scores')).json();
+    expect(nation.categories.every((c: { applicable: boolean }) => c.applicable)).toBe(true);
+  });
+
+  it('labels leader scores as trust scores and skips foreign policy for mayors', async () => {
+    const { rows } = await h.apiPool.query<{ slug: string }>(
+      "SELECT slug FROM leaders WHERE office_kind = 'mayor' LIMIT 1",
+    );
+    const s = (await call('GET', `/v1/leaders/${rows[0]!.slug}/scores`)).json();
+    expect(s.kind).toBe('trust');
+    expect(s.peerLabel).toBe('mayors');
+    const war = s.categories.find(
+      (c: { category: { slug: string } }) =>
+        c.category.slug === 'armed-forces-and-national-security',
+    );
+    expect(war).toMatchObject({ applicable: false, score: null });
+  });
+});
+
+describe('precomputed data and caching', () => {
+  it('serves cached public pages with an ETag and answers 304 when unchanged', async () => {
+    const first = await call('GET', '/v1/places/california');
+    expect(first.headers['cache-control']).toMatch(/public/);
+    const etag = first.headers.etag as string;
+    expect(etag).toBeTruthy();
+    const again = await h.app.inject({
+      method: 'GET',
+      url: '/v1/places/california',
+      headers: { 'if-none-match': etag },
+    });
+    expect(again.statusCode).toBe(304);
+    expect(again.body).toBe('');
+  });
+
+  it('includes the monthly-basics cost figure compared with peers', async () => {
+    const p = (await call('GET', '/v1/places/texas')).json();
+    expect(p.cost.basicsMonthly).toBeGreaterThan(0);
+    expect(p.cost.peerCount).toBe(5);
+    expect(p.cost.formula).toMatch(/gallons of gasoline/);
+  });
+});
+
+describe('request accountability', () => {
+  async function governor() {
+    const { rows } = await h.apiPool.query<{ slug: string }>(
+      "SELECT slug FROM leaders WHERE office_kind = 'governor' ORDER BY created_at LIMIT 1",
+    );
+    return rows[0]!.slug;
+  }
+
+  it('shows status, responses and how long a request has waited past the threshold', async () => {
+    const list = (await call('GET', `/v1/leaders/${await governor()}/requests`)).json();
+    expect(list.threshold).toBe(25);
+    const waiting = list.requests.find((r: { title: string }) => r.title.includes('town hall'));
+    expect(waiting.awaitingResponseDays).toBe(12);
+    const answered = list.requests.find((r: { title: string }) => r.title.includes('schedule'));
+    expect(answered).toMatchObject({ status: 'responded', awaitingResponseDays: null });
+    expect(answered.response).toMatch(/Sample response/);
+  });
+
+  it('lets only the claimed leader respond, and moderators merge duplicates with a reason', async () => {
+    const slug = await governor();
+    const a = (
+      await call('POST', `/v1/leaders/${slug}/requests`, alice, { title: 'Fix potholes on Main' })
+    ).json().id;
+    const b = (
+      await call('POST', `/v1/leaders/${slug}/requests`, bob, {
+        title: 'Repair Main Street potholes',
+      })
+    ).json().id;
+
+    // Not the leader yet: refused.
+    expect(
+      (
+        await call('PATCH', `/v1/leader-requests/${a}`, alice, {
+          status: 'responded',
+          response: 'Hi',
+        })
+      ).statusCode,
+    ).toBe(403);
+
+    // Alice claims the governor page (claim flow comes later; set directly here).
+    await h.apiPool.query(
+      'UPDATE leaders SET account_id = (SELECT id FROM accounts WHERE username = $1) WHERE slug = $2',
+      ['alice', slug],
+    );
+    expect(
+      (await call('PATCH', `/v1/leader-requests/${a}`, alice, { status: 'responded' })).statusCode,
+    ).toBe(400); // a response is required
+    expect(
+      (
+        await call('PATCH', `/v1/leader-requests/${a}`, alice, {
+          status: 'responded',
+          response: 'Crews start Monday.',
+        })
+      ).statusCode,
+    ).toBe(200);
+
+    // Moderator merges Bob's duplicate into Alice's request; votes move over.
+    const mod = await moderator(h, 'mod_requests');
+    expect(
+      (await call('PATCH', `/v1/leader-requests/${b}`, mod, { status: 'merged', mergeInto: a }))
+        .statusCode,
+    ).toBe(400); // reason code required
+    expect(
+      (
+        await call('PATCH', `/v1/leader-requests/${b}`, mod, {
+          status: 'merged',
+          mergeInto: a,
+          reasonCode: 'duplicate_request',
+        })
+      ).statusCode,
+    ).toBe(200);
+    const list = (await call('GET', `/v1/leaders/${slug}/requests`)).json().requests;
+    expect(list.find((r: { id: string }) => r.id === b)).toBeUndefined();
+    expect(list.find((r: { id: string }) => r.id === a)).toMatchObject({
+      votes: 2,
+      mergedCount: 1,
+      status: 'responded',
+      response: 'Crews start Monday.',
+    });
+    const { rows } = await h.apiPool.query(
+      "SELECT 1 FROM moderation_log WHERE action = 'request.merged' AND reason_code = 'duplicate_request'",
+    );
+    expect(rows).toHaveLength(1);
+    await h.apiPool.query('UPDATE leaders SET account_id = NULL WHERE slug = $1', [slug]);
+  });
+});
+
+describe('follows and the home feed', () => {
+  it('follows a leader and shows their bills in the feed with a reason', async () => {
+    const { rows } = await h.apiPool.query<{ slug: string }>(
+      `SELECT l.slug FROM leaders l JOIN bill_sponsors s ON s.leader_id = l.id
+        JOIN bills b ON b.id = s.bill_id WHERE b.last_action_at >= CURRENT_DATE - 60 LIMIT 1`,
+    );
+    const slug = rows[0]!.slug;
+    expect((await call('GET', `/v1/follows/leader/${slug}`, bob)).json().following).toBe(false);
+    expect((await call('PUT', `/v1/follows/leader/${slug}`, bob)).statusCode).toBe(204);
+    expect((await call('GET', `/v1/follows/leader/${slug}`, bob)).json().following).toBe(true);
+    const feed = (await call('GET', '/v1/feed', bob)).json();
+    expect(feed.following).toEqual(
+      expect.arrayContaining([expect.objectContaining({ kind: 'leader', id: slug })]),
+    );
+    expect(feed.updates.length).toBeGreaterThan(0);
+    expect(feed.updates[0].reason).toMatch(/follow/);
+  });
+});
+
+describe('deck filters and stages', () => {
+  it('filters by scope and stage and labels each bill with its stage', async () => {
+    const fed = (await call('GET', '/v1/bills?scope=federal')).json().bills;
+    expect(fed.length).toBeGreaterThan(0);
+    expect(fed.every((b: { level: string }) => b.level === 'federal')).toBe(true);
+    const decided = (await call('GET', '/v1/bills?stage=decided')).json().bills;
+    expect(
+      decided.every((b: { status: string }) => ['signed', 'vetoed', 'failed'].includes(b.status)),
+    ).toBe(true);
+    const deck = (await call('GET', '/v1/bills/deck?scope=state', bob)).json().bills;
+    expect(deck.every((b: { level: string }) => b.level === 'state')).toBe(true);
+    expect(deck[0].stage).toMatch(/proposed|voting|decided/);
+  });
+});
+
+describe('mock election ballots', () => {
+  it('takes one private ballot per member and shows results only afterwards', async () => {
+    const { rows } = await h.apiPool.query<{ id: string }>(
+      "SELECT e.id FROM elections e JOIN places p ON p.id = e.place_id WHERE p.slug = 'austin-tx' LIMIT 1",
+    );
+    const id = rows[0]!.id;
+    const before = (await call('GET', `/v1/elections/${id}`, alice)).json();
+    expect(before.candidates).toHaveLength(3);
+    expect(before.candidates[0].votes).toBeNull();
+    const cand = before.candidates[0].id;
+    expect(
+      (await call('POST', `/v1/elections/${id}/ballot`, alice, { candidateId: cand })).statusCode,
+    ).toBe(400); // must attest to voting there
+    expect(
+      (
+        await call('POST', `/v1/elections/${id}/ballot`, alice, {
+          candidateId: cand,
+          residentAttested: true,
+        })
+      ).statusCode,
+    ).toBe(201);
+    expect(
+      (
+        await call('POST', `/v1/elections/${id}/ballot`, alice, {
+          candidateId: cand,
+          residentAttested: true,
+        })
+      ).statusCode,
+    ).toBe(409);
+    const after = (await call('GET', `/v1/elections/${id}`, alice)).json();
+    expect(after.total).toBe(1);
+    expect(after.candidates.find((c: { id: string }) => c.id === cand).votes).toBe(1);
+    expect((await call('GET', `/v1/elections/${id}`)).json().total).toBeNull(); // guest
+
+    const { rows: cols } = await h.apiPool.query<{ column_name: string }>(
+      "SELECT column_name FROM information_schema.columns WHERE table_name = 'election_ballots' ORDER BY column_name",
+    );
+    expect(cols.map((c) => c.column_name)).toEqual(['account_id', 'election_id']);
   });
 });
 

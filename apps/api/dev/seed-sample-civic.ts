@@ -1,4 +1,5 @@
 import type { Pool } from '@demanity/db';
+import { OFFICE_LEVEL, PLACE_LEVEL, recomputeRollups } from '../src/civic/rollups.js';
 
 /**
  * DEVELOPMENT ONLY. Illustrative civic data so place, leader and bill pages
@@ -47,33 +48,103 @@ const SUB_PLACES: Array<{
   name: string;
   kind: 'county' | 'city' | 'court_district';
   state: (typeof STATES)[number];
+  /** Rough population, sample rows only (drives similar-size peer groups). */
+  population?: number;
 }> = [
   {
     slug: 'los-angeles-county-ca',
     name: 'Los Angeles County',
     kind: 'county',
     state: 'california',
+    population: 9700000,
   },
-  { slug: 'san-diego-county-ca', name: 'San Diego County', kind: 'county', state: 'california' },
-  { slug: 'harris-county-tx', name: 'Harris County', kind: 'county', state: 'texas' },
-  { slug: 'travis-county-tx', name: 'Travis County', kind: 'county', state: 'texas' },
-  { slug: 'miami-dade-county-fl', name: 'Miami-Dade County', kind: 'county', state: 'florida' },
-  { slug: 'kings-county-ny', name: 'Kings County', kind: 'county', state: 'new-york' },
+  {
+    slug: 'san-diego-county-ca',
+    name: 'San Diego County',
+    kind: 'county',
+    state: 'california',
+    population: 3300000,
+  },
+  {
+    slug: 'harris-county-tx',
+    name: 'Harris County',
+    kind: 'county',
+    state: 'texas',
+    population: 4800000,
+  },
+  {
+    slug: 'travis-county-tx',
+    name: 'Travis County',
+    kind: 'county',
+    state: 'texas',
+    population: 1300000,
+  },
+  {
+    slug: 'miami-dade-county-fl',
+    name: 'Miami-Dade County',
+    kind: 'county',
+    state: 'florida',
+    population: 2700000,
+  },
+  {
+    slug: 'kings-county-ny',
+    name: 'Kings County',
+    kind: 'county',
+    state: 'new-york',
+    population: 2600000,
+  },
   {
     slug: 'philadelphia-county-pa',
     name: 'Philadelphia County',
     kind: 'county',
     state: 'pennsylvania',
+    population: 1550000,
   },
-  { slug: 'allegheny-county-pa', name: 'Allegheny County', kind: 'county', state: 'pennsylvania' },
-  { slug: 'los-angeles-ca', name: 'Los Angeles', kind: 'city', state: 'california' },
-  { slug: 'san-francisco-ca', name: 'San Francisco', kind: 'city', state: 'california' },
-  { slug: 'houston-tx', name: 'Houston', kind: 'city', state: 'texas' },
-  { slug: 'austin-tx', name: 'Austin', kind: 'city', state: 'texas' },
-  { slug: 'miami-fl', name: 'Miami', kind: 'city', state: 'florida' },
-  { slug: 'new-york-city-ny', name: 'New York City', kind: 'city', state: 'new-york' },
-  { slug: 'philadelphia-pa', name: 'Philadelphia', kind: 'city', state: 'pennsylvania' },
-  { slug: 'pittsburgh-pa', name: 'Pittsburgh', kind: 'city', state: 'pennsylvania' },
+  {
+    slug: 'allegheny-county-pa',
+    name: 'Allegheny County',
+    kind: 'county',
+    state: 'pennsylvania',
+    population: 1200000,
+  },
+  {
+    slug: 'los-angeles-ca',
+    name: 'Los Angeles',
+    kind: 'city',
+    state: 'california',
+    population: 3800000,
+  },
+  {
+    slug: 'san-francisco-ca',
+    name: 'San Francisco',
+    kind: 'city',
+    state: 'california',
+    population: 800000,
+  },
+  { slug: 'houston-tx', name: 'Houston', kind: 'city', state: 'texas', population: 2300000 },
+  { slug: 'austin-tx', name: 'Austin', kind: 'city', state: 'texas', population: 970000 },
+  { slug: 'miami-fl', name: 'Miami', kind: 'city', state: 'florida', population: 450000 },
+  {
+    slug: 'new-york-city-ny',
+    name: 'New York City',
+    kind: 'city',
+    state: 'new-york',
+    population: 8300000,
+  },
+  {
+    slug: 'philadelphia-pa',
+    name: 'Philadelphia',
+    kind: 'city',
+    state: 'pennsylvania',
+    population: 1550000,
+  },
+  {
+    slug: 'pittsburgh-pa',
+    name: 'Pittsburgh',
+    kind: 'city',
+    state: 'pennsylvania',
+    population: 300000,
+  },
   {
     slug: 'cd-cal',
     name: 'Central District of California',
@@ -391,6 +462,18 @@ const BILL_IDEAS: Array<{ title: string; category: string; summary: string }> = 
     summary: 'Rebates for insulation and efficient heat pumps.',
   },
 ];
+/** Illustrative "what changes for you" lines. */
+const IMPACTS = [
+  'you could see a doctor after work without taking time off.',
+  'more small homes could be built in your neighborhood.',
+  'employers near you get a reason to hire and train apprentices.',
+  'families with unpaid school meal balances would have them cleared.',
+  'homes without internet service could get connected.',
+  'the worst bridges on your commute would be fixed first.',
+  'your area would get firebreaks and evacuation drills.',
+  'shelf labels would show the price per ounce or pound.',
+];
+
 const STATUSES = [
   'introduced',
   'in_committee',
@@ -422,12 +505,19 @@ export async function seedSampleCivic(
     "SELECT id, slug, name FROM communities WHERE kind = 'topic' ORDER BY name",
   );
   const catBySlug = new Map(cats.map((c) => [c.slug, c]));
+  // Only score categories that apply to a subject's level of government.
+  const { rows: levelRows } = await pool.query<{ category_id: string; level: string }>(
+    'SELECT category_id, level FROM category_levels',
+  );
+  const applies = (categoryId: string, level: string | undefined) =>
+    levelRows.some((r) => r.category_id === categoryId && r.level === level);
 
   // Sub-places (sample rows; real geography names).
   for (const p of SUB_PLACES) {
     const { rows } = await pool.query<{ id: string }>(
-      `INSERT INTO places (slug, name, kind, parent_id, is_sample) VALUES ($1, $2, $3, $4, true) RETURNING id`,
-      [p.slug, p.name, p.kind, placeBySlug.get(p.state)!.id],
+      `INSERT INTO places (slug, name, kind, parent_id, population, is_sample)
+       VALUES ($1, $2, $3, $4, $5, true) RETURNING id`,
+      [p.slug, p.name, p.kind, placeBySlug.get(p.state)!.id, p.population ?? null],
     );
     placeBySlug.set(p.slug, { id: rows[0]!.id, slug: p.slug, name: p.name, kind: p.kind });
   }
@@ -485,6 +575,7 @@ export async function seedSampleCivic(
     const base = between(38, 66);
     const scores: Array<{ slug: string; score: number }> = [];
     for (const c of cats) {
+      if (!applies(c.id, PLACE_LEVEL[p.kind])) continue; // e.g. no foreign policy for cities
       const score = clampScore(base + between(-30, 30));
       const n = int(1, 8); // indicators behind the score
       scores.push({ slug: c.slug, score });
@@ -559,16 +650,24 @@ export async function seedSampleCivic(
             ? [['general', 'County executive and commissioners', '2028-11-07']]
             : [];
     for (const [kind, office, date] of elections) {
-      await pool.query(
+      const { rows: e } = await pool.query<{ id: string }>(
         `INSERT INTO elections (place_id, office, kind, election_date, source_label, is_sample)
-         VALUES ($1, $2, $3, $4, 'Sample · planned source: state election office', true)`,
+         VALUES ($1, $2, $3, $4, 'Sample · planned source: state election office', true) RETURNING id`,
         [p.id, office, kind, date],
       );
+      // Fictional candidates, one per party.
+      for (const party of PARTIES) {
+        await pool.query(
+          'INSERT INTO election_candidates (election_id, name, party, is_sample) VALUES ($1, $2, $3, true)',
+          [e[0]!.id, fictionalName(), party],
+        );
+      }
     }
   }
 
   for (const l of leaders) {
     for (const c of cats) {
+      if (!applies(c.id, OFFICE_LEVEL[l.kind])) continue; // mayors do not run foreign policy
       const n = int(0, 14); // rated citations
       if (n === 0) continue; // not scored yet in this category
       const score = clampScore(between(20, 85));
@@ -612,8 +711,8 @@ export async function seedSampleCivic(
     const status = STATUSES[i % STATUSES.length]!;
     const introduced = int(20, 300);
     const { rows } = await pool.query<{ id: string }>(
-      `INSERT INTO bills (place_id, number, title, summary, category_id, status, introduced_at, last_action_at, is_sample)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true) RETURNING id`,
+      `INSERT INTO bills (place_id, number, title, summary, category_id, status, introduced_at, last_action_at, impact, is_sample)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, true) RETURNING id`,
       [
         placeBySlug.get(jurisdiction)!.id,
         federal ? `H.R. ${9000 + i} (sample)` : `SB ${700 + i} (sample)`,
@@ -623,6 +722,7 @@ export async function seedSampleCivic(
         status,
         isoDaysAgo(introduced),
         isoDaysAgo(int(1, introduced)),
+        `Sample: ${IMPACTS[i % IMPACTS.length]}`,
       ],
     );
     const billId = rows[0]!.id;
@@ -658,11 +758,32 @@ export async function seedSampleCivic(
     [governor.id, '[Sample] Publish your weekly schedule', 'Sample request for transparency.'],
     [senator.id, '[Sample] Explain your vote on the bridge repair bill', 'Sample request.'],
   ];
+  // Illustrate the accountability loop: one awaiting a response past the
+  // vote threshold, one answered by the leader, one simply open.
+  const lifecycle: Array<{
+    status: string;
+    response: string | null;
+    thresholdDaysAgo: number | null;
+  }> = [
+    { status: 'open', response: null, thresholdDaysAgo: 12 },
+    {
+      status: 'responded',
+      response:
+        'Sample response from the leader: the weekly schedule will be posted every Monday starting next month.',
+      thresholdDaysAgo: 30,
+    },
+    { status: 'open', response: null, thresholdDaysAgo: null },
+  ];
   for (const [i, [leaderId, title, body]] of asks.entries()) {
     const author = authors[i % Math.max(authors.length, 1)]?.id ?? null;
+    const life = lifecycle[i]!;
     const { rows } = await pool.query<{ id: string }>(
-      'INSERT INTO leader_requests (leader_id, author_id, title, body) VALUES ($1, $2, $3, $4) RETURNING id',
-      [leaderId, author, title, body],
+      `INSERT INTO leader_requests (leader_id, author_id, title, body, status, response, responded_at, threshold_reached_at)
+       VALUES ($1, $2, $3, $4, $5, $6::text,
+               CASE WHEN $6::text IS NULL THEN NULL ELSE now() - interval '3 days' END,
+               CASE WHEN $7::int IS NULL THEN NULL ELSE now() - make_interval(days => $7::int) END)
+       RETURNING id`,
+      [leaderId, author, title, body, life.status, life.response, life.thresholdDaysAgo],
     );
     for (const a of authors.slice(0, authors.length - i))
       await pool.query(
@@ -671,6 +792,7 @@ export async function seedSampleCivic(
       );
   }
 
+  await recomputeRollups(pool);
   return { skipped: false, leaders: leaders.length, bills };
 }
 
@@ -689,4 +811,5 @@ export async function clearSampleData(pool: Pool): Promise<void> {
   await pool.query('DELETE FROM leaders WHERE is_sample');
   await pool.query('DELETE FROM places WHERE is_sample');
   await pool.query('DELETE FROM guides WHERE is_sample');
+  await recomputeRollups(pool);
 }

@@ -32,6 +32,11 @@ test('capture key screens', async ({ page }) => {
   await page.goto('/c/california?tab=overview');
   await shot('10-place-overview');
   await page.goto('/c/california?tab=scores');
+  await shot('11a-place-scores-summary');
+  await page
+    .getByRole('button', { name: /^See all 32 categories/ })
+    .filter({ visible: true })
+    .click();
   await page
     .getByRole('button', { name: /^Health:/ })
     .filter({ visible: true })
@@ -39,6 +44,14 @@ test('capture key screens', async ({ page }) => {
   await shot('11-place-scores');
   await page.goto('/c/california?tab=living');
   await shot('12-place-cost-of-living');
+  await page
+    .getByRole('button', { name: /^Monthly basics/ })
+    .filter({ visible: true })
+    .click();
+  await shot('12a-cost-breakdown');
+  await page.goto('/c/california?tab=overview');
+  await page.getByText('Cast a mock ballot →').filter({ visible: true }).first().click();
+  await shot('19-election');
   await page.goto('/place/austin-tx');
   await shot('13-city');
   await page.goto('/c/california?tab=leaders');

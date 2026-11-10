@@ -4,6 +4,7 @@ import Fastify, { type FastifyInstance, type FastifyServerOptions } from 'fastif
 import type { Redis } from 'ioredis';
 import type { Pool } from '@demanity/db';
 import { ROUTE_LIMITS, rateLimitKey, type RouteLimits } from './rate-limit.js';
+import { ResponseCache } from './cache.js';
 import { civicRoutes } from './routes/civic.js';
 import { moderationRoutes } from './routes/moderation.js';
 import { socialRoutes } from './routes/social.js';
@@ -32,6 +33,8 @@ export interface AppDeps {
   rp: RelyingParty;
   /** Rate limiting with hashed IP keys. Without `redis`, counters are in-process (tests/dev). */
   rateLimit: { secret: Buffer; redis?: Redis; now?: () => Date; routeLimits?: RouteLimits };
+  /** Response cache tuning; tests use versionCheckMs: 0 to see recomputes immediately. */
+  cache?: { versionCheckMs?: number };
 }
 
 export interface BuildAppOptions {
@@ -87,7 +90,11 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
       socialRoutes(scoped, { pool, limits: rl.routeLimits ?? ROUTE_LIMITS }),
     );
     await app.register(async (scoped) =>
-      civicRoutes(scoped, { pool, limits: rl.routeLimits ?? ROUTE_LIMITS }),
+      civicRoutes(scoped, {
+        pool,
+        limits: rl.routeLimits ?? ROUTE_LIMITS,
+        cache: new ResponseCache(pool, options.deps!.cache ?? {}),
+      }),
     );
   }
 

@@ -44,10 +44,30 @@ Members can weigh in on bills from a card deck: swipe right to support, left to 
 - **One stance per member per bill, and it can't be changed.** No code path edits a stance.
 - **Private by design.** The database records only *that* a member weighed in (so the bill isn't shown again), not which way, and with no timestamp. The direction exists only as an anonymous running total for the bill. A database leak therefore can't reveal how any person feels about a bill.
 - **Results after you weigh in.** Totals are hidden until you've weighed in, to avoid bandwagon effects. They always show n and the self-selected-sample label.
+- **Your own choices stay on your device.** Because the server can't know which way you swiped, the app remembers your stance only on your device (secure storage on phones, local storage in the browser). That lets a bill page say "You supported". Nothing is sent anywhere.
+- **Stages.** Every bill is labeled with one of three stages:
+  - **Proposed:** introduced, not yet acted on.
+  - **Being voted on:** in committee, passed one chamber, or passed and awaiting signature.
+  - **Decided:** signed, vetoed or failed.
+- **A personal, filterable deck.** Bills you are most likely to care about come first: bills you follow, bills sponsored by leaders you follow, bills in places you follow, then bills in topics you follow. Each card says why it is there. After those come bills being voted on, then proposed, then decided. You can filter by level (federal or state), by state, by stage and by topic.
+- **"What changes for you".** Each bill carries a one-line, plain-language description of its effect on people.
 - This is an interim design until unlinkable ballots ([EXPERIMENTS.md](EXPERIMENTS.md), idea 1) replace it.
 
-## 3b. Leader requests
-Each leader page has a Requests tab where members post what they most want that leader to do and upvote others' requests, one vote per member. Requests are public posts, like forum posts. They are sorted by votes.
+## 3b. Leader requests and the accountability loop
+Each leader page has a Requests tab where members post what they most want that leader to do and upvote others' requests, one vote per member. Requests are public posts, like forum posts, and they are sorted by votes.
+- **Status:** Open → Acknowledged → Responded → Done.
+  - The leader, once they have claimed their page, can acknowledge a request, respond to it in writing, or mark it done.
+  - Moderators can mark a request done when the action is documented, remove it, or merge duplicates.
+  - Every moderator action cites a published reason code and appears in the public moderation log.
+- **Must-respond threshold.** When a request reaches **25 votes**, the time of crossing is recorded. Until the leader responds, the request shows "Awaiting response · N days". The threshold is a published constant and will be tuned once real usage exists.
+- **Merging duplicates.** When a moderator merges a duplicate, its votes move to the original (one per member) and the original shows "N duplicates merged in".
+
+## 3c. Mock election ballots
+Each upcoming election on a place page has a mock ballot.
+- **One ballot per verified member per election, private by design.** The database records only *that* an account voted in that election, with no candidate and no time. Choices exist only as anonymous per-candidate totals. A ballot can't be changed.
+- **Results appear only after you vote,** and always show n and the self-selected-sample label.
+- **Residency is self-declared today.** Members confirm they vote in that election. It will be checked privately once verified-state credentials ship ([EXPERIMENTS.md](EXPERIMENTS.md), idea 1).
+- **Accuracy is measured, not claimed.** We don't claim mock ballots predict better than polls. After each election the official result for each candidate is recorded, and the page shows the mean absolute error in percentage points between the mock results and the official count. Over time that builds a public track record.
 
 ## 4. User contributions (moderator-approved)
 - **Missing items:** bills, orders or rulings the feeds missed. Each needs an approved source ([SOURCES.md](SOURCES.md)).

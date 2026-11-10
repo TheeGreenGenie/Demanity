@@ -22,7 +22,7 @@
 - **Twilio Verify** (optional SMS 2FA, enabled only if configured): sees the phone number when it sends a code.
 
 ### Bill stances
-How a member swiped on a bill is never stored with their account. Only the fact that they weighed in is stored, with no time and no direction; the direction is added to an anonymous per-bill total ([LEGISLATION.md ง3a](LEGISLATION.md)).
+How a member swiped on a bill is never stored with their account. Mock election ballots follow the same design: only "voted in this election" is stored, never the candidate. Your own stances are remembered only on your device. Only the fact that they weighed in is stored, with no time and no direction; the direction is added to an anonymous per-bill total ([LEGISLATION.md ยง3a](LEGISLATION.md)).
 
 ## 2. Separation
 - The **identity vault** is a separate service with its own database, its own credentials and its own key-management keys.

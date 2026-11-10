@@ -8,6 +8,7 @@ export const SAMPLE_TABLES = [
   'place_stats',
   'place_issues',
   'elections',
+  'election_candidates',
   'bills',
   'guides',
 ] as const;

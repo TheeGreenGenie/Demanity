@@ -8,12 +8,16 @@ import { AvatarPalette } from '@/constants/theme';
  * username, so each person keeps a stable color everywhere.
  */
 export function Avatar({ name, size = 44 }: { name: string | null; size?: number }) {
-  const label = name
-    ? name
-        .replace(/[^a-z0-9]/gi, '')
-        .slice(0, 2)
-        .toUpperCase() || '?'
-    : '?';
+  // Full names (leaders, candidates) use initials; usernames use their first two characters.
+  const words = (name ?? '').trim().split(/\s+/).filter(Boolean);
+  const label = !name
+    ? '?'
+    : words.length > 1
+      ? (words[0]![0]! + words[words.length - 1]![0]!).toUpperCase()
+      : name
+          .replace(/[^a-z0-9]/gi, '')
+          .slice(0, 2)
+          .toUpperCase() || '?';
   let hash = 0;
   for (const ch of name ?? '') hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
   const bg = name ? AvatarPalette[hash % AvatarPalette.length] : '#3A3D43';
