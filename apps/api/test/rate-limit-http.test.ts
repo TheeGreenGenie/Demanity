@@ -40,12 +40,12 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await app.close();
-  const keys = await redis.keys(`${nameSpace}*`);
+  await app?.close();
+  const keys = (await redis?.keys(`${nameSpace}*`)) ?? [];
   if (keys.length) await redis.del(...keys);
-  redis.disconnect();
-  await pool.end();
-  await drop();
+  redis?.disconnect();
+  await pool?.end();
+  await drop?.();
 });
 
 describe('rate limiting (real Redis, production limits)', () => {

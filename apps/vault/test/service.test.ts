@@ -36,8 +36,8 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await pool.end();
-  await drop();
+  await pool?.end();
+  await drop?.();
 });
 
 beforeEach(() => {

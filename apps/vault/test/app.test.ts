@@ -49,9 +49,9 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await app.close();
-  await pool.end();
-  await drop();
+  await app?.close();
+  await pool?.end();
+  await drop?.();
 });
 
 const body = (overrides: Record<string, unknown> = {}) => ({

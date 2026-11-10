@@ -17,8 +17,8 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await pool.end();
-  await drop();
+  await pool?.end();
+  await drop?.();
 });
 
 describe('migrate', () => {
