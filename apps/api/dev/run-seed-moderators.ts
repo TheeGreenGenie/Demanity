@@ -1,5 +1,5 @@
 // DEVELOPMENT ONLY: pnpm --filter @demanity/api seed:dev-moderators
-// Creates (or re-issues tokens for) dev_mod_1 and dev_mod_2.
+// Creates (or re-issues tokens for) dev_mod_1, dev_mod_2 and dev_mod_3.
 
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';

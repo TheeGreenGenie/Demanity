@@ -28,7 +28,15 @@ export async function seedDevModerators(opts: {
   vault: VaultService;
   count?: number;
 }): Promise<SeededModerator[]> {
-  const { apiPool, vaultPool, vault, count = 2 } = opts;
+  // Three, so a fact-check panel can be seated (docs/MODERATION.md §4).
+  const { apiPool, vaultPool, vault, count = 3 } = opts;
+  const LEANS = ['left', 'center', 'right'] as const;
+  const setLean = (id: string, i: number) =>
+    apiPool.query(
+      `INSERT INTO moderator_leans (account_id, lean) VALUES ($1, $2)
+       ON CONFLICT (account_id) DO NOTHING`,
+      [id, LEANS[(i - 1) % 3]],
+    );
   const out: SeededModerator[] = [];
   const expiresInDays = SESSION_TTL_SECONDS.full / 86_400;
 
@@ -45,6 +53,7 @@ export async function seedDevModerators(opts: {
       throw new Error(`${username} exists but is not a seed account; refusing to touch it`);
     }
     if (existing) {
+      await setLean(existing.id, i);
       out.push({
         username,
         token: await createSession(apiPool, existing.id, 'full'),
@@ -81,6 +90,7 @@ export async function seedDevModerators(opts: {
 
     await apiPool.query("UPDATE accounts SET status = 'active' WHERE id = $1", [accountId]);
     await apiPool.query('INSERT INTO dev_seed_accounts (account_id) VALUES ($1)', [accountId]);
+    await setLean(accountId, i);
     await apiPool.query("INSERT INTO account_roles (account_id, role) VALUES ($1, 'moderator')", [
       accountId,
     ]);
