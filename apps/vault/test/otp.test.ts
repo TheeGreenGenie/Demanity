@@ -145,6 +145,6 @@ describe('ResendEmailSender', () => {
         text: 't',
       }),
     ).rejects.toThrow(/422/);
-    expect(() => new ResendEmailSender('sk_live_x', 'x@example.org')).toThrow(/re_/);
+    expect(() => new ResendEmailSender('not-a-resend-key', 'x@example.org')).toThrow(/re_/);
   });
 });
