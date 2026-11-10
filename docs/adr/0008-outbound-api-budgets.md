@@ -27,6 +27,7 @@ Going over a provider's limit can get a key throttled or suspended, and on paid 
    - Every email or SMS reserves one unit from **service-wide hourly and daily caps** (`outbound_usage`; counts only, no addresses).
    - **Email:** 20 per hour and 80 per day by default. Resend's free plan allows 100 per day.
    - **SMS:** 5 per hour and 20 per day by default, for the Twilio trial.
+   - **Per phone number (SMS):** at most 3 codes per hour and 6 per day to any one number, whoever asks (`outbound_destination_usage`, keyed hashes only). This guards against SMS pumping and against flooding one person's phone. It is checked before the service-wide cap, so one targeted number can't use up the shared quota.
    - Over a cap, the person sees "too many codes, try again later" (HTTP 429). Nothing is sent and nothing is counted.
    - The development console sender is not capped, because it sends nothing.
 4. **Open States and CourtListener.** Budgeted after checking each provider's own published limits on 2026-11-10. Budgets now have minute, hour and day windows, and all of them are enforced together.

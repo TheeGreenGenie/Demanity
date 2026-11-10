@@ -1,6 +1,7 @@
 import {
   CappedEmailSender,
   CappedTwoFactor,
+  DestinationCap,
   OutboundCap,
   outboundLimits,
 } from './providers/outbound-cap.js';
@@ -124,7 +125,13 @@ export function buildTwoFactor(
   return new ChannelRouter({
     email: new EmailOtpProvider(pool, config.lookupKey, email),
     ...(config.sms
-      ? { sms: new CappedTwoFactor(config.sms, new OutboundCap(pool, 'sms', limits.sms)) }
+      ? {
+          sms: new CappedTwoFactor(
+            config.sms,
+            new OutboundCap(pool, 'sms', limits.sms),
+            new DestinationCap(pool, config.lookupKey, limits.smsPerNumber),
+          ),
+        }
       : {}),
   });
 }

@@ -8,6 +8,7 @@ import { InMemoryEmailSender } from '../src/providers/email.js';
 import {
   CappedEmailSender,
   CappedTwoFactor,
+  DestinationCap,
   OutboundCap,
   outboundLimits,
 } from '../src/providers/outbound-cap.js';
@@ -64,6 +65,27 @@ describe('service-wide outbound caps', () => {
     expect(outboundLimits({})).toEqual({
       email: { perHour: 20, perDay: 80 },
       sms: { perHour: 5, perDay: 20 },
+      smsPerNumber: { perHour: 3, perDay: 6 },
     });
+  });
+});
+
+describe('per-number SMS caps', () => {
+  it('limits codes to one phone number, stores no number, and leaves others unaffected', async () => {
+    const inner = new InMemoryTwoFactorProvider();
+    const sms = new CappedTwoFactor(
+      inner,
+      new OutboundCap(pool, 'sms', { perHour: 1000, perDay: 1000 }),
+      new DestinationCap(pool, randomBytes(32), { perHour: 2, perDay: 6 }),
+    );
+    await sms.start('+15551110000', 'sms');
+    await sms.start('+15551110000', 'sms');
+    await expect(sms.start('+15551110000', 'sms')).rejects.toBeInstanceOf(OtpRateLimitedError);
+    await sms.start('+15552220000', 'sms'); // a different number still works
+    const { rows } = await pool.query<{ destination: Buffer }>(
+      'SELECT destination FROM outbound_destination_usage',
+    );
+    expect(rows.length).toBeGreaterThan(0);
+    for (const r of rows) expect(r.destination.toString('latin1')).not.toContain('5551110000');
   });
 });

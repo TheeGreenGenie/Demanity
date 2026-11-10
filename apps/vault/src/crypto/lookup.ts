@@ -7,7 +7,7 @@ import { createHmac } from 'node:crypto';
  * the activity database.
  */
 
-export type LookupPurpose = 'contact:email' | 'contact:phone' | 'account' | 'otp';
+export type LookupPurpose = 'contact:email' | 'contact:phone' | 'account' | 'otp' | 'sms-cap';
 
 export function lookupHash(key: Buffer, purpose: LookupPurpose, value: string): Buffer {
   return createHmac('sha256', key).update(`demanity:lookup:${purpose}|${value}`, 'utf8').digest();

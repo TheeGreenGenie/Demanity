@@ -1,4 +1,5 @@
 import type { Pool } from '@demanity/db';
+import { lookupHash } from '../crypto/lookup.js';
 import type { EmailMessage, EmailSender } from './email.js';
 import { OtpRateLimitedError } from './otp.js';
 import type { Channel, TwoFactorProvider } from './two-factor.js';
@@ -64,16 +65,66 @@ export class CappedEmailSender implements EmailSender {
   }
 }
 
+/**
+ * Per-destination caps (SMS): at most `perHour` / `perDay` codes to one phone
+ * number, whoever asks. The number is kept only as a keyed hash.
+ */
+export class DestinationCap {
+  constructor(
+    private readonly pool: Pool,
+    private readonly key: Buffer,
+    readonly limits: OutboundLimits,
+  ) {}
+
+  async reserve(to: string): Promise<void> {
+    const destination = lookupHash(this.key, 'sms-cap', to);
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(
+        "DELETE FROM outbound_destination_usage WHERE window_start < now() - interval '2 days'",
+      );
+      for (const [kind, limit] of [
+        ['hour', this.limits.perHour],
+        ['day', this.limits.perDay],
+      ] as const) {
+        const { rows } = await client.query(
+          `INSERT INTO outbound_destination_usage (destination, window_kind, window_start, sent)
+           VALUES ($1, $2, date_trunc($2, now()), 1)
+           ON CONFLICT (destination, window_kind, window_start)
+             DO UPDATE SET sent = outbound_destination_usage.sent + 1
+             WHERE outbound_destination_usage.sent < $3
+           RETURNING sent`,
+          [destination, kind, limit],
+        );
+        if (rows.length === 0) {
+          await client.query('ROLLBACK');
+          throw new OtpRateLimitedError();
+        }
+      }
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+}
+
 /** Caps only `start` (which sends a message); checking a code sends nothing. */
 export class CappedTwoFactor implements TwoFactorProvider {
   constructor(
     private readonly inner: TwoFactorProvider,
     private readonly cap: OutboundCap,
+    private readonly perDestination?: DestinationCap,
   ) {}
   supports(channel: Channel) {
     return this.inner.supports(channel);
   }
   async start(to: string, channel: Channel) {
+    // Per-number first, so one flooded number can't use up the shared quota.
+    await this.perDestination?.reserve(to);
     await this.cap.reserve();
     await this.inner.start(to, channel);
   }
@@ -95,5 +146,10 @@ export function outboundLimits(env: NodeJS.ProcessEnv = process.env) {
   return {
     email: { perHour: num('VAULT_EMAIL_PER_HOUR', 20), perDay: num('VAULT_EMAIL_PER_DAY', 80) },
     sms: { perHour: num('VAULT_SMS_PER_HOUR', 5), perDay: num('VAULT_SMS_PER_DAY', 20) },
+    // Codes to any one phone number, whoever asks.
+    smsPerNumber: {
+      perHour: num('VAULT_SMS_PER_NUMBER_PER_HOUR', 3),
+      perDay: num('VAULT_SMS_PER_NUMBER_PER_DAY', 6),
+    },
   };
 }

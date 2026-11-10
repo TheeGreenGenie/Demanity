@@ -13,6 +13,7 @@ import { contentModerationRoutes } from './routes/content-moderation.js';
 import { citationRoutes } from './routes/citations.js';
 import { factCheckRoutes } from './routes/fact-checks.js';
 import { perspectiveRoutes } from './routes/perspectives.js';
+import { transparencyRoutes } from './routes/transparency.js';
 import type { FactCheckProvider } from './factcheck/ai.js';
 import { civicRoutes } from './routes/civic.js';
 import { moderationRoutes } from './routes/moderation.js';
@@ -114,6 +115,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
       factCheckRoutes(scoped, { pool, limits, ...(options.deps!.factCheck ?? {}) }),
     );
     await app.register(async (scoped) => perspectiveRoutes(scoped, { pool, limits }));
+    await app.register(async (scoped) => transparencyRoutes(scoped, { pool }));
   }
 
   return app;
