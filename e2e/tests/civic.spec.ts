@@ -56,6 +56,8 @@ test('guests explore a state: overview, scores with explanations, cost of living
 
 test('search finds places and hides Humanity', async ({ page }) => {
   await page.goto('/search');
+  // Wait until the app has loaded (the directory renders), so typing isn't lost.
+  await expect(visible(page, 'Top topics')).toBeVisible();
   await page.getByLabel('Search Demanity').fill('austin');
   await expect(
     page.getByRole('link', { name: /Austin city/ }).filter({ visible: true }),

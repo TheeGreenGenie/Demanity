@@ -431,6 +431,42 @@ export interface Freshness {
   }[];
 }
 
+export interface ContributorStatus {
+  grants: { category: string; categoryName: string; expiresAt: string }[];
+  applications: {
+    id: string;
+    category: string;
+    categoryName: string;
+    status: 'pending' | 'approved' | 'rejected';
+    reasonCode: string | null;
+    createdAt: string;
+  }[];
+}
+
+export interface PendingApplication {
+  id: string;
+  category: string;
+  categoryName: string;
+  essay: string;
+  createdAt: string;
+}
+
+export interface PendingClaim {
+  id: string;
+  leaderSlug: string;
+  leaderName: string;
+  office: string;
+  username: string;
+  evidence: string;
+  createdAt: string;
+}
+
+export interface LeaderViewer {
+  isLeader: boolean;
+  claimPending: boolean;
+  claimed: boolean;
+}
+
 export type FollowKind = 'community' | 'user' | 'leader' | 'place' | 'bill';
 
 export interface FollowedItem {
@@ -538,6 +574,40 @@ export const civic = {
       '/v1/sources',
     ),
   freshness: () => request<Freshness>('GET', '/v1/data-freshness'),
+  applyToContribute: (token: string, category: string, essay: string) =>
+    request<{ id: string; status: string }>('POST', '/v1/contributor-applications', {
+      token,
+      body: { category, essay },
+    }),
+  myContributor: (token: string) => request<ContributorStatus>('GET', '/v1/me/contributor', { token }),
+  pendingApplications: (token: string) =>
+    request<{ applications: PendingApplication[] }>('GET', '/v1/moderation/contributor-applications', {
+      token,
+    }),
+  decideApplication: (token: string, id: string, decision: 'approve' | 'reject', reasonCode: string) =>
+    request<{ status: string }>('POST', `/v1/moderation/contributor-applications/${id}/decision`, {
+      token,
+      body: { decision, reasonCode },
+    }),
+  leaderViewer: (token: string | null, slug: string) =>
+    request<LeaderViewer>('GET', `/v1/leaders/${slug}/viewer`, { token }),
+  claimLeader: (token: string, slug: string, evidence: string) =>
+    request<{ id: string; status: string }>('POST', `/v1/leaders/${slug}/claims`, {
+      token,
+      body: { evidence },
+    }),
+  pendingClaims: (token: string) =>
+    request<{ claims: PendingClaim[] }>('GET', '/v1/moderation/leader-claims', { token }),
+  decideClaim: (token: string, id: string, decision: 'approve' | 'reject', reasonCode: string) =>
+    request<{ status: string }>('POST', `/v1/moderation/leader-claims/${id}/decision`, {
+      token,
+      body: { decision, reasonCode },
+    }),
+  updateRequest: (
+    token: string,
+    id: string,
+    body: { status: 'acknowledged' | 'responded' | 'done'; response?: string },
+  ) => request<{ status: string }>('PATCH', `/v1/leader-requests/${id}`, { token, body }),
   guides: () => request<{ guides: GuideSummary[] }>('GET', '/v1/guides'),
   guide: (slug: string) => request<Guide>('GET', `/v1/guides/${slug}`),
   search: (token: string | null, q: string) =>
@@ -601,6 +671,13 @@ export function describeError(err: unknown): string {
     cannot_follow_self: 'You can’t follow yourself.',
     not_found: 'That could not be found.',
     already_voted: 'You already voted on this.',
+    application_pending: 'You already have an application waiting for review in this topic.',
+    already_contributor: 'You’re already a contributor in this topic.',
+    claim_pending: 'A claim for this page is already being reviewed.',
+    already_claimed: 'This page has already been claimed.',
+    already_a_leader: 'Your account is already linked to a leader page.',
+    response_required: 'Write a response first.',
+    not_allowed: 'You can’t do that.',
     contributors_only:
       'Only contributors approved for this topic can add citations. Contributors apply with a short essay.',
     self_citation: 'Leaders can’t cite themselves.',

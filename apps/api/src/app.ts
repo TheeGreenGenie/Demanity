@@ -5,6 +5,7 @@ import type { Redis } from 'ioredis';
 import type { Pool } from '@demanity/db';
 import { ROUTE_LIMITS, rateLimitKey, type RouteLimits } from './rate-limit.js';
 import { ResponseCache } from './cache.js';
+import { applicationRoutes } from './routes/applications.js';
 import { citationRoutes } from './routes/citations.js';
 import { civicRoutes } from './routes/civic.js';
 import { moderationRoutes } from './routes/moderation.js';
@@ -64,7 +65,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     // tokens, not cookies, so credentials are never sent cross-origin.
     await app.register(cors, {
       origin: rp.origins,
-      methods: ['GET', 'POST', 'PUT', 'DELETE'],
+      methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
       allowedHeaders: ['authorization', 'content-type'],
       credentials: false,
       maxAge: 600,
@@ -95,6 +96,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     const limits = rl.routeLimits ?? ROUTE_LIMITS;
     await app.register(async (scoped) => civicRoutes(scoped, { pool, limits, cache }));
     await app.register(async (scoped) => citationRoutes(scoped, { pool, limits, cache }));
+    await app.register(async (scoped) => applicationRoutes(scoped, { pool, limits }));
   }
 
   return app;

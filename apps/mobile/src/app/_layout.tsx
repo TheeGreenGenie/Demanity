@@ -46,6 +46,8 @@ function RootStack() {
         <Stack.Screen name="compose" options={{ title: 'New post', presentation: 'modal' }} />
         <Stack.Screen name="cite" options={{ title: '', presentation: 'modal' }} />
         <Stack.Screen name="moderation" options={{ title: 'Moderation' }} />
+        <Stack.Screen name="contribute" options={{ title: '' }} />
+        <Stack.Screen name="claim" options={{ title: '', presentation: 'modal' }} />
       </Stack.Protected>
     </Stack>
   );

@@ -28,6 +28,11 @@ describe('CORS', () => {
     expect(res.headers['access-control-allow-credentials']).toBeUndefined();
   });
 
+  it('allows PATCH (used to update leader request status)', async () => {
+    const res = await preflight(RP.origins[0]!);
+    expect(String(res.headers['access-control-allow-methods'])).toMatch(/PATCH/);
+  });
+
   it('does not allow other origins', async () => {
     const res = await preflight('https://evil.example');
     expect(res.headers['access-control-allow-origin']).toBeUndefined();

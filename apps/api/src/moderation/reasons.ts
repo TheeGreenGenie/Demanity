@@ -46,6 +46,16 @@ export const REASON_CODES = {
   },
   // Contributor status: granted after an essay review, revoked for cause.
   contributor: ['essay_approved', 'contribution_score_low', 'other_policy_violation'],
+  // Contributor applications (essay review).
+  contributorApplication: {
+    approve: ['essay_approved'],
+    reject: ['essay_insufficient', 'essay_not_original', 'other_policy_violation'],
+  },
+  // Leader page claims.
+  leaderClaim: {
+    approve: ['identity_confirmed_official_channel'],
+    reject: ['identity_not_confirmed', 'not_the_officeholder', 'other_policy_violation'],
+  },
   recovery: {
     approve: ['ownership_plausible'],
     deny: ['ownership_not_established', 'suspected_takeover'],

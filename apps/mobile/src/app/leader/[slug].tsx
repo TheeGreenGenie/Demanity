@@ -24,6 +24,7 @@ import {
   describeError,
   type Leader,
   type LeaderRequest,
+  type LeaderViewer,
   type RequestStatus,
 } from '@/lib/api';
 import { isFullyOnboarded, useAuth } from '@/lib/auth';
@@ -94,6 +95,7 @@ export default function LeaderScreen() {
         ) : null}
       </View>
       <ErrorText message={error} />
+      {leader ? <ClaimBanner leader={leader} /> : null}
       {leader?.isSample ? (
         <SampleBanner what="this leader is a fictional person; the bills and scores are made up" />
       ) : null}
@@ -135,6 +137,7 @@ function RequestsTab({ leader }: { leader: Leader }) {
   const member = isFullyOnboarded(me) && token !== null;
   const [requests, setRequests] = useState<LeaderRequest[]>([]);
   const [threshold, setThreshold] = useState(25);
+  const isLeader = useLeaderViewer(leader.slug)?.isLeader ?? false;
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [titleError, setTitleError] = useState<string | undefined>();
@@ -249,6 +252,7 @@ function RequestsTab({ leader }: { leader: Leader }) {
                 <ThemedText type="small">{r.response}</ThemedText>
               </View>
             ) : null}
+            {isLeader && r.status !== 'done' ? <LeaderControls request={r} onChange={load} /> : null}
           </View>
         </View>
       ))}
@@ -289,6 +293,101 @@ function RequestsTab({ leader }: { leader: Leader }) {
   );
 }
 
+/** Viewer-specific leader state (claimed? is this my page?), kept off the cached page. */
+function useLeaderViewer(slug: string) {
+  const { token } = useAuth();
+  const [state, setState] = useState<LeaderViewer | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    civic
+      .leaderViewer(token, slug)
+      .then((v) => !cancelled && setState(v))
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [token, slug]);
+  return state;
+}
+
+function ClaimBanner({ leader }: { leader: Leader }) {
+  const router = useRouter();
+  const theme = useTheme();
+  const { me } = useAuth();
+  const viewer = useLeaderViewer(leader.slug);
+  if (!viewer || leader.isSample || !leader.inOffice) return null;
+  if (viewer.isLeader)
+    return (
+      <View style={[styles.banner2, { backgroundColor: theme.backgroundElement }]}>
+        <ThemedText type="smallBold" style={{ color: Brand.primary }}>
+          This is your page. You can answer requests on the Requests tab.
+        </ThemedText>
+      </View>
+    );
+  if (viewer.claimPending)
+    return (
+      <View style={[styles.banner2, { backgroundColor: theme.backgroundElement }]}>
+        <ThemedText type="small" themeColor="textSecondary">
+          Your claim on this page is being reviewed.
+        </ThemedText>
+      </View>
+    );
+  if (viewer.claimed || !isFullyOnboarded(me)) return null;
+  return (
+    <Pressable
+      accessibilityRole="link"
+      onPress={() =>
+        router.push({ pathname: '/claim', params: { slug: leader.slug, name: leader.name } })
+      }
+      style={[styles.banner2, { backgroundColor: theme.backgroundElement }]}
+    >
+      <ThemedText type="small" style={{ color: Brand.primary, fontWeight: 800 }}>
+        Are you {leader.name}? Claim this page →
+      </ThemedText>
+    </Pressable>
+  );
+}
+
+/** For the leader only: acknowledge, respond in writing, or mark done. */
+function LeaderControls({ request, onChange }: { request: LeaderRequest; onChange: () => void }) {
+  const { token } = useAuth();
+  const [writing, setWriting] = useState(false);
+  const [text, setText] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const update = async (status: 'acknowledged' | 'responded' | 'done', response?: string) => {
+    try {
+      await civic.updateRequest(token!, request.id, response ? { status, response } : { status });
+      setWriting(false);
+      onChange();
+    } catch (err) {
+      setError(describeError(err));
+    }
+  };
+  return (
+    <View style={styles.controls}>
+      {writing ? (
+        <>
+          <Field label="Your response" value={text} onChangeText={setText} multiline maxLength={4000} />
+          <Button
+            title="Post response"
+            size="small"
+            onPress={() => (text.trim() ? update('responded', text.trim()) : setError('Write a response first.'))}
+          />
+        </>
+      ) : (
+        <View style={styles.controlRow}>
+          {request.status === 'open' ? (
+            <Button title="Acknowledge" size="small" variant="secondary" onPress={() => update('acknowledged')} />
+          ) : null}
+          <Button title="Respond" size="small" variant="secondary" onPress={() => setWriting(true)} />
+          <Button title="Mark done" size="small" variant="ghost" onPress={() => update('done')} />
+        </View>
+      )}
+      <ErrorText message={error} />
+    </View>
+  );
+}
+
 const STATUS: Record<RequestStatus, { label: string; color: string }> = {
   open: { label: 'Open', color: '#8B919C' },
   acknowledged: { label: 'Acknowledged', color: Brand.location },
@@ -308,6 +407,9 @@ function RequestStatusChip({ status }: { status: RequestStatus }) {
 }
 
 const styles = StyleSheet.create({
+  banner2: { marginHorizontal: Spacing.three, marginTop: Spacing.two, padding: Spacing.three - 4, borderRadius: Radius.medium },
+  controls: { gap: Spacing.two, marginTop: Spacing.two },
+  controlRow: { flexDirection: 'row', gap: Spacing.two, flexWrap: 'wrap' },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three },
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, flexWrap: 'wrap' },
   chip: { borderWidth: 1, borderRadius: Radius.pill, paddingHorizontal: Spacing.two },

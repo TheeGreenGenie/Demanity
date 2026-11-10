@@ -62,6 +62,15 @@ async function apiAs(page: Page, method: string, path: string, body?: unknown) {
   );
 }
 
+/** The innermost element that contains `text` and a `button` (i.e. that item's card). */
+function cardWith(page: Page, text: string, buttonName: string) {
+  return page
+    .locator('div')
+    .filter({ hasText: text })
+    .filter({ has: page.getByRole('button', { name: buttonName }) })
+    .last();
+}
+
 async function openGovernorHealth(page: Page) {
   await page.goto('/c/texas?tab=leaders');
   await page
@@ -116,25 +125,57 @@ test('contributor cites a leader, a moderator accepts it, and a member rates it'
   const card = mod.getByText(claim).filter({ visible: true });
   await expect(card).toBeVisible();
   // Accept the card that holds our claim (other runs may have left items).
-  const accept = mod
-    .locator('div')
-    .filter({ hasText: claim })
-    .getByRole('button', { name: 'Accept' })
-    .last();
+  const accept = cardWith(mod, claim, 'Accept').getByRole('button', { name: 'Accept' });
   await accept.click();
   await expect(card).toHaveCount(0);
 
   // A member sees it under the leader's score and rates it once.
   await openGovernorHealth(contrib);
   await expect(contrib.getByText(claim).filter({ visible: true })).toBeVisible();
-  await contrib
-    .locator('div')
-    .filter({ hasText: claim })
-    .getByRole('button', { name: 'Accurate? Yes' })
-    .last()
-    .click();
-  await expect(contrib.getByText('Yes 1 · No 0').filter({ visible: true }).first()).toBeVisible();
+  const ourCard = cardWith(contrib, claim, 'Accurate? Yes');
+  await ourCard.getByRole('button', { name: 'Accurate? Yes' }).click();
+  await expect(ourCard.getByText('Yes 1 · No 0')).toBeVisible();
 
   await modCtx.close();
   await contribCtx.close();
+});
+
+test('a member applies to contribute and a moderator approves the anonymous essay', async ({
+  browser,
+}) => {
+  const modCtx = await browser.newContext();
+  const mod = await modCtx.newPage();
+  await mod.goto('/');
+  await addVirtualPasskeyDevice(mod);
+  grantModerator(await signUp(mod, stack, 'e2e_mod2'));
+
+  const ctx = await browser.newContext();
+  const page = await ctx.newPage();
+  await page.goto('/');
+  await addVirtualPasskeyDevice(page);
+  await signUp(page, stack, 'e2e_applicant');
+
+  const marker = `Essay ${randomBytes(3).toString('hex')}.`;
+  await page.goto('/account');
+  await button(page, 'Become a contributor').click();
+  await page.getByRole('button', { name: 'Education' }).filter({ visible: true }).click();
+  await button(page, 'Submit application').click();
+  await expect(page.getByText(/Write at least 300 characters/)).toBeVisible();
+  await page
+    .getByLabel('Your essay')
+    .fill(`${marker} ${'School funding, attendance and reading scores, with sources. '.repeat(6)}`);
+  await button(page, 'Submit application').click();
+  await expect(page.getByText('Education: Under review')).toBeVisible();
+
+  await mod.goto('/moderation');
+  const card = mod.locator('div').filter({ hasText: marker });
+  await expect(card.first()).toBeVisible();
+  await cardWith(mod, marker, 'Approve').getByRole('button', { name: 'Approve' }).click();
+  await expect(mod.getByText(marker)).toHaveCount(0);
+
+  await page.goto('/contribute');
+  await expect(page.getByText(/Contributor in Education until/)).toBeVisible();
+
+  await modCtx.close();
+  await ctx.close();
 });

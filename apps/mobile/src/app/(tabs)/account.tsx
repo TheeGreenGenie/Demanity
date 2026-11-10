@@ -84,6 +84,11 @@ export default function AccountScreen() {
       </View>
       <ModeratorLink />
       <Button
+        title="Become a contributor"
+        variant="secondary"
+        onPress={() => router.push('/contribute')}
+      />
+      <Button
         title="View your public profile"
         variant="secondary"
         onPress={() =>

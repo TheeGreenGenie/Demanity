@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Chips } from '@/components/civic';
 import { Button, ErrorText, Field } from '@/components/form';
@@ -127,9 +127,14 @@ export default function CiteScreen() {
       </View>
       <ErrorText message={error} />
       <Button title="Submit for review" onPress={submit} busy={busy} />
-      <ThemedText type="caption" style={{ color: Brand.primary }}>
-        Not a contributor yet? Contributors are approved per topic after a short essay.
-      </ThemedText>
+      <Pressable
+        accessibilityRole="link"
+        onPress={() => router.push({ pathname: '/contribute', params: { category } })}
+      >
+        <ThemedText type="caption" style={{ color: Brand.primary, fontWeight: 800 }}>
+          Not a contributor yet? Apply with a short essay →
+        </ThemedText>
+      </Pressable>
     </Screen>
   );
 }

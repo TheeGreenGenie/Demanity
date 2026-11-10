@@ -1,13 +1,19 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Linking, Pressable, StyleSheet, View } from 'react-native';
 
-import { Chips } from '@/components/civic';
+import { Chips, Section } from '@/components/civic';
 import { Button, ErrorText } from '@/components/form';
 import { Screen } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
 import { Brand, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { civic, describeError, type PendingCitation } from '@/lib/api';
+import {
+  civic,
+  describeError,
+  type PendingApplication,
+  type PendingCitation,
+  type PendingClaim,
+} from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 
 /** Published reason codes (apps/api/src/moderation/reasons.ts). */
@@ -27,6 +33,8 @@ const REJECT_REASONS = [
 export default function ModerationScreen() {
   const { token } = useAuth();
   const [items, setItems] = useState<PendingCitation[] | null>(null);
+  const [apps, setApps] = useState<PendingApplication[]>([]);
+  const [claims, setClaims] = useState<PendingClaim[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
@@ -35,19 +43,121 @@ export default function ModerationScreen() {
       .pendingCitations(token)
       .then((r) => setItems(r.citations))
       .catch((err) => setError(describeError(err)));
+    civic
+      .pendingApplications(token)
+      .then((r) => setApps(r.applications))
+      .catch(() => undefined);
+    civic
+      .pendingClaims(token)
+      .then((r) => setClaims(r.claims))
+      .catch(() => undefined);
   }, [token]);
   useEffect(load, [load]);
 
   return (
-    <Screen title="Review citations" subtitle="Check that the source supports the claim.">
+    <Screen title="Moderation" subtitle="Every decision cites a reason and is publicly logged.">
       <ErrorText message={error} />
+      <Section title={`Citations (${items?.length ?? 0})`} caption="Check that the source supports the claim." />
       {items && items.length === 0 ? (
         <ThemedText themeColor="textSecondary">Nothing waiting for review.</ThemedText>
       ) : null}
       {(items ?? []).map((c) => (
         <ReviewCard key={c.id} citation={c} onDone={load} />
       ))}
+      <Section
+        title={`Contributor applications (${apps.length})`}
+        caption="Judge the essay, not the person: applicants are anonymous to you."
+      />
+      {apps.map((a) => (
+        <DecisionCard
+          key={a.id}
+          heading={`c/${a.category}`}
+          body={a.essay}
+          approveReason="essay_approved"
+          rejectReasons={APP_REJECT}
+          onDecide={(d, reason) => civic.decideApplication(token!, a.id, d, reason)}
+          onDone={load}
+        />
+      ))}
+      <Section
+        title={`Leader page claims (${claims.length})`}
+        caption="Confirm through an official channel (e.g. the official .gov email) before approving."
+      />
+      {claims.map((c) => (
+        <DecisionCard
+          key={c.id}
+          heading={`${c.leaderName} · ${c.office} · claimed by u/${c.username}`}
+          body={c.evidence}
+          approveReason="identity_confirmed_official_channel"
+          rejectReasons={CLAIM_REJECT}
+          onDecide={(d, reason) => civic.decideClaim(token!, c.id, d, reason)}
+          onDone={load}
+        />
+      ))}
     </Screen>
+  );
+}
+
+const APP_REJECT = [
+  { key: 'essay_insufficient', label: 'Not enough substance' },
+  { key: 'essay_not_original', label: 'Not original' },
+  { key: 'other_policy_violation', label: 'Other policy violation' },
+] as const;
+const CLAIM_REJECT = [
+  { key: 'identity_not_confirmed', label: 'Couldn’t confirm' },
+  { key: 'not_the_officeholder', label: 'Not the officeholder' },
+  { key: 'other_policy_violation', label: 'Other policy violation' },
+] as const;
+
+/** Approve / reject with a published reason (applications and claims). */
+function DecisionCard({
+  heading,
+  body,
+  approveReason,
+  rejectReasons,
+  onDecide,
+  onDone,
+}: {
+  heading: string;
+  body: string;
+  approveReason: string;
+  rejectReasons: readonly { key: string; label: string }[];
+  onDecide: (decision: 'approve' | 'reject', reason: string) => Promise<unknown>;
+  onDone: () => void;
+}) {
+  const theme = useTheme();
+  const [reason, setReason] = useState<string>(rejectReasons[0]!.key);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  async function decide(d: 'approve' | 'reject') {
+    setBusy(true);
+    setError(null);
+    try {
+      await onDecide(d, d === 'approve' ? approveReason : reason);
+      onDone();
+    } catch (err) {
+      setError(describeError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <View style={[styles.card, { backgroundColor: theme.backgroundElement }]}>
+      <ThemedText type="caption" style={{ color: Brand.primary, fontWeight: 900 }}>
+        {heading}
+      </ThemedText>
+      <ThemedText type="small">{body}</ThemedText>
+      <Chips label="Reason for rejecting" value={reason} onChange={setReason} options={rejectReasons} />
+      <ErrorText message={error} />
+      <View style={styles.row}>
+        <View style={styles.flex}>
+          <Button title="Reject" variant="secondary" onPress={() => decide('reject')} busy={busy} />
+        </View>
+        <View style={styles.flex}>
+          <Button title="Approve" onPress={() => decide('approve')} busy={busy} />
+        </View>
+      </View>
+    </View>
   );
 }
 
