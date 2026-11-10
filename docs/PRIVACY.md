@@ -16,6 +16,10 @@
 
 **Never stored:** names, dates of birth, ID documents, SheerID payloads, behavioral ad profiles.
 
+**Third-party processors.** These services see limited data in order to deliver a function. They never see any political activity.
+- **SheerID** (identity verification): sees the identity attributes submitted during verification.
+- **Twilio Verify** (2FA codes): sees the user's phone number or email address when it sends a code.
+
 ## 2. Separation
 - The **identity vault** is a separate service with its own database, its own credentials and its own key-management keys.
 - The **link** between the vault and an account in the Activity DB exists only in the vault, and it is encrypted.
