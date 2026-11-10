@@ -84,7 +84,13 @@ export async function startStack(): Promise<Stack> {
   const node = (cwd: string) =>
     spawn(process.execPath, [`--env-file=${envFile}`, 'dist/server.js'], {
       cwd: join(root, cwd),
-      env: { ...process.env, LOG_LEVEL: 'warn', NODE_ENV: 'development' },
+      // Tests read codes from the vault's console output and must never send real email.
+      env: {
+        ...process.env,
+        LOG_LEVEL: 'warn',
+        NODE_ENV: 'development',
+        EMAIL_DELIVERY: 'console',
+      },
     });
 
   const vault = node('apps/vault');

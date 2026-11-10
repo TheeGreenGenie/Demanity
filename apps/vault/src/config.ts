@@ -63,12 +63,23 @@ export function loadVaultConfig(env: NodeJS.ProcessEnv = process.env): VaultConf
     throw new Error('Production requires the SheerID verifier adapter (not yet implemented)');
   }
 
-  // Email 2FA (default, free): vault-generated codes, delivered by Resend when configured.
+  // Email 2FA (default, free): vault-generated codes. Delivery is explicit:
+  // EMAIL_DELIVERY=resend sends real email; anything else outside production
+  // prints codes to the console. Having a Resend key in .env is not enough on
+  // its own, so tests and demos never send real email by accident.
+  const delivery = env.EMAIL_DELIVERY ?? (production ? 'resend' : 'console');
+  if (delivery !== 'resend' && delivery !== 'console')
+    throw new Error('EMAIL_DELIVERY must be "resend" or "console"');
+  if (production && delivery !== 'resend')
+    throw new Error(
+      'Production requires EMAIL_DELIVERY=resend (with RESEND_API_KEY and EMAIL_FROM)',
+    );
   let emailSender: EmailSender;
-  if (env.RESEND_API_KEY) {
-    emailSender = new ResendEmailSender(env.RESEND_API_KEY, required(env, 'EMAIL_FROM'));
-  } else if (production) {
-    throw new Error('Production requires RESEND_API_KEY and EMAIL_FROM for email 2FA');
+  if (delivery === 'resend') {
+    emailSender = new ResendEmailSender(
+      required(env, 'RESEND_API_KEY'),
+      required(env, 'EMAIL_FROM'),
+    );
   } else {
     emailSender = new DevConsoleEmailSender();
   }

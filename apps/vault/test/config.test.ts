@@ -22,14 +22,26 @@ describe('vault config', () => {
     expect(c.port).toBe(3100);
   });
 
-  it('uses Resend for email when configured', () => {
-    const c = loadVaultConfig({
+  it('uses Resend only when EMAIL_DELIVERY=resend is set explicitly', () => {
+    const resend = {
       ...dev(),
+      EMAIL_DELIVERY: 'resend',
       RESEND_API_KEY: 're_test',
       EMAIL_FROM: 'Demanity <codes@example.org>',
-    });
-    expect(c.emailSender).toBeInstanceOf(ResendEmailSender);
-    expect(() => loadVaultConfig({ ...dev(), RESEND_API_KEY: 're_test' })).toThrow(/EMAIL_FROM/);
+    };
+    expect(loadVaultConfig(resend).emailSender).toBeInstanceOf(ResendEmailSender);
+    expect(() => loadVaultConfig({ ...resend, EMAIL_FROM: undefined })).toThrow(/EMAIL_FROM/);
+    expect(() => loadVaultConfig({ ...resend, RESEND_API_KEY: undefined })).toThrow(
+      /RESEND_API_KEY/,
+    );
+    // A key in .env alone never sends real email outside production.
+    expect(
+      loadVaultConfig({ ...dev(), RESEND_API_KEY: 're_test', EMAIL_FROM: 'x@example.org' })
+        .emailSender,
+    ).toBeInstanceOf(DevConsoleEmailSender);
+    expect(() => loadVaultConfig({ ...dev(), EMAIL_DELIVERY: 'carrier-pigeon' })).toThrow(
+      /EMAIL_DELIVERY/,
+    );
   });
 
   it('enables optional SMS via Twilio Verify only when credentials are present', () => {
