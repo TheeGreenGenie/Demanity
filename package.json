@@ -19,7 +19,8 @@
     "db:up": "docker compose -f infra/docker-compose.yml up -d",
     "db:down": "docker compose -f infra/docker-compose.yml down",
     "check:dco": "node scripts/check-dco.mjs",
-    "e2e": "pnpm --filter @demanity/e2e e2e"
+    "e2e": "pnpm --filter @demanity/e2e e2e",
+    "e2e:all": "pnpm db:up && pnpm build && pnpm --filter @demanity/mobile exec expo export --platform web && pnpm e2e"
   },
   "devDependencies": {
     "prettier": "^3.9.10",

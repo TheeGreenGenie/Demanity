@@ -1,5 +1,6 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync } from 'node:fs';
+import { createConnection } from 'node:net';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Redis } from 'ioredis';
@@ -16,6 +17,8 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 export interface Stack {
   latestCode(email: string): string | undefined;
+  /** Captured vault output (stdout + stderr), for diagnosing failures. */
+  vaultLog(): string;
   stop(): Promise<void>;
 }
 
@@ -33,7 +36,29 @@ async function waitFor(url: string, timeoutMs = 60_000) {
   throw new Error(`Timed out waiting for ${url}`);
 }
 
+/** True if something already accepts connections on 127.0.0.1:port. */
+function portInUse(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = createConnection({ host: '127.0.0.1', port });
+    socket.once('connect', () => {
+      socket.destroy();
+      resolve(true);
+    });
+    socket.once('error', () => resolve(false));
+  });
+}
+
 export async function startStack(): Promise<Stack> {
+  // Another Demanity stack on these ports would silently answer our readiness
+  // checks while our own servers fail to bind, so refuse to start instead.
+  for (const port of [3000, 3100, 8081]) {
+    if (await portInUse(port)) {
+      throw new Error(
+        `Port ${port} is already in use. Stop any running Demanity servers (or other apps on that port) before running e2e.`,
+      );
+    }
+  }
+
   const envFile = join(root, '.env');
   if (!existsSync(envFile)) throw new Error('Missing repo-root .env (see .env.example)');
   for (const f of ['apps/vault/dist/server.js', 'apps/api/dist/server.js', 'apps/mobile/dist']) {
@@ -64,6 +89,7 @@ export async function startStack(): Promise<Stack> {
 
   const vault = node('apps/vault');
   vault.stdout!.on('data', (d) => (vaultOut += d.toString()));
+  vault.stderr!.on('data', (d) => (vaultOut += `[stderr] ${d.toString()}`));
   procs.push(vault);
   procs.push(node('apps/api'));
   procs.push(
@@ -79,6 +105,7 @@ export async function startStack(): Promise<Stack> {
   await waitFor('http://localhost:8081/');
 
   return {
+    vaultLog: () => vaultOut,
     latestCode(email: string) {
       const re = new RegExp(
         `\\[dev email\\] to=${email.replace(/[.+]/g, '\\$&')}[^\\n]*\\n[^\\n]*?(\\d{6})`,

@@ -6,6 +6,12 @@ authenticator** (Chrome DevTools Protocol) stands in for the user's device, so
 passkey sign-up and sign-in run for real.
 
 ## Run
+One command (works in Windows PowerShell 5.1, macOS and Linux):
+```bash
+pnpm e2e:all
+```
+
+Or step by step. In Windows PowerShell 5.1 run each line separately, because `&&` isn't supported there:
 ```bash
 pnpm db:up                                   # Docker: Postgres x2 + Redis
 pnpm build                                   # API, vault, db package
@@ -15,7 +21,7 @@ pnpm e2e
 
 ## Notes
 - **Setup:** needs the repo-root `.env` (copy `.env.example`, then run `node scripts/gen-secrets.mjs`).
-- **Ports:** the stack starts on the API's 3000, the vault's 3100 and the web app's 8081. Those ports must be free.
+- **Ports:** the stack starts on the API's 3000, the vault's 3100 and the web app's 8081. If any is already in use (for example by another Demanity stack you started), the run stops with a clear error instead of testing the wrong servers.
 - **Email codes:** read from the vault's development email output. No real email is sent.
 - **Rate limits:** each run clears the local Redis rate-limit counters first, because the production limits (5 sign-ups per hour) would otherwise block repeated runs. It refuses to do this on a non-local Redis.
 - **Leftover data:** test accounts (`e2e_*`) stay in your local development databases. They never go anywhere else.

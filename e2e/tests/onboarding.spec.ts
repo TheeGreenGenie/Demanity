@@ -61,7 +61,11 @@ test('a new person signs up, verifies, confirms email, creates a passkey and sig
   await page.getByLabel('Email').fill(email);
   await page.getByRole('button', { name: 'Send code' }).click();
   await expect(page.getByLabel('6-digit code')).toBeVisible();
-  await expect.poll(() => stack.latestCode(email)).toMatch(/^\d{6}$/);
+  await expect
+    .poll(() => stack.latestCode(email), {
+      message: `no code in vault output:\n${stack.vaultLog().slice(-2000)}`,
+    })
+    .toMatch(/^\d{6}$/);
   await page.getByLabel('6-digit code').fill(stack.latestCode(email)!);
   await page.getByRole('button', { name: 'Confirm' }).click();
 
