@@ -36,7 +36,16 @@ export interface IdentityPayload {
 export type Channel = 'sms' | 'email';
 
 export interface Vault {
-  verifyIdentity(accountId: string, person: IdentityPayload): Promise<'verified' | 'needs_review'>;
+  verifyIdentity(
+    accountId: string,
+    person: IdentityPayload,
+    override?: { reasonCode: string },
+  ): Promise<'verified' | 'needs_review'>;
+  matchIdentity(
+    accountId: string,
+    attrs: { state: string; licenseNumber: string },
+  ): Promise<boolean>;
+  ban(accountId: string, reasonCode: string): Promise<void>;
   setContact(accountId: string, channel: Channel, value: string): Promise<void>;
   startTwoFactor(accountId: string, channel: Channel): Promise<void>;
   checkTwoFactor(accountId: string, channel: Channel, code: string): Promise<boolean>;
@@ -70,9 +79,26 @@ export class HttpVaultClient implements Vault {
     return res;
   }
 
-  async verifyIdentity(accountId: string, person: IdentityPayload) {
-    const res = await this.call('POST', '/v1/identities/verify', { accountId, ...person });
+  async verifyIdentity(
+    accountId: string,
+    person: IdentityPayload,
+    override?: { reasonCode: string },
+  ) {
+    const res = await this.call('POST', '/v1/identities/verify', {
+      accountId,
+      ...person,
+      ...(override ? { override } : {}),
+    });
     return res.status === 202 ? 'needs_review' : 'verified';
+  }
+
+  async matchIdentity(accountId: string, attrs: { state: string; licenseNumber: string }) {
+    const res = await this.call('POST', '/v1/identities/match', { accountId, ...attrs });
+    return ((await res.json()) as { match: boolean }).match;
+  }
+
+  async ban(accountId: string, reasonCode: string) {
+    await this.call('POST', `/v1/accounts/${accountId}/ban`, { reasonCode });
   }
 
   async setContact(accountId: string, channel: Channel, value: string) {

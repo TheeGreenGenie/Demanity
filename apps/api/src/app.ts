@@ -2,7 +2,8 @@ import rateLimit from '@fastify/rate-limit';
 import Fastify, { type FastifyInstance, type FastifyServerOptions } from 'fastify';
 import type { Redis } from 'ioredis';
 import type { Pool } from '@demanity/db';
-import { rateLimitKey, type RouteLimits } from './rate-limit.js';
+import { ROUTE_LIMITS, rateLimitKey, type RouteLimits } from './rate-limit.js';
+import { moderationRoutes } from './routes/moderation.js';
 import { loadSession } from './auth/guard.js';
 import { Passkeys, type RelyingParty } from './auth/passkeys.js';
 import type { ChallengeStore } from './auth/challenges.js';
@@ -66,6 +67,9 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
         passkeys: new Passkeys(pool, challenges, rp),
         ...(rl.routeLimits ? { limits: rl.routeLimits } : {}),
       }),
+    );
+    await app.register(async (scoped) =>
+      moderationRoutes(scoped, { pool, vault, limits: rl.routeLimits ?? ROUTE_LIMITS }),
     );
   }
 

@@ -90,6 +90,12 @@ export async function buildVaultApp(opts: {
           required: ['accountId', 'firstName', 'lastName', 'birthDate', 'state', 'licenseNumber'],
           properties: {
             accountId: uuid,
+            override: {
+              type: 'object',
+              additionalProperties: false,
+              required: ['reasonCode'],
+              properties: { reasonCode: { type: 'string', pattern: '^[a-z_]{3,40}$' } },
+            },
             firstName: { type: 'string', minLength: 1, maxLength: 100 },
             lastName: { type: 'string', minLength: 1, maxLength: 100 },
             birthDate: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' },
@@ -100,16 +106,67 @@ export async function buildVaultApp(opts: {
       },
     },
     async (req, reply) => {
-      const { accountId, ...person } = req.body as {
+      const { accountId, override, ...person } = req.body as {
         accountId: string;
+        override?: { reasonCode: string };
         firstName: string;
         lastName: string;
         birthDate: string;
         state: string;
         licenseNumber: string;
       };
-      const { identityId } = await opts.service.verifyAndRegister(accountId, person);
+      const { identityId } = await opts.service.verifyAndRegister(accountId, person, override);
       return reply.code(201).send({ status: 'verified', identityId });
+    },
+  );
+
+  app.post(
+    '/v1/identities/match',
+    {
+      schema: {
+        body: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['accountId', 'state', 'licenseNumber'],
+          properties: {
+            accountId: uuid,
+            state: { type: 'string', minLength: 2, maxLength: 2 },
+            licenseNumber: { type: 'string', minLength: 4, maxLength: 30 },
+          },
+        },
+      },
+    },
+    async (req) => {
+      const { accountId, state, licenseNumber } = req.body as {
+        accountId: string;
+        state: string;
+        licenseNumber: string;
+      };
+      return { match: await opts.service.matchesAccount(accountId, { state, licenseNumber }) };
+    },
+  );
+
+  app.post(
+    '/v1/accounts/:accountId/ban',
+    {
+      schema: {
+        params: { type: 'object', required: ['accountId'], properties: { accountId: uuid } },
+        body: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['reasonCode'],
+          properties: { reasonCode: { type: 'string', pattern: '^[a-z_]{3,40}$' } },
+        },
+      },
+    },
+    async (req, reply) => {
+      const { accountId } = req.params as { accountId: string };
+      await opts.service.ban(
+        accountId,
+        'moderator',
+        (req.body as { reasonCode: string }).reasonCode,
+      );
+      return reply.code(204).send();
     },
   );
 

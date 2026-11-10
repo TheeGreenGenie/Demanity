@@ -80,6 +80,11 @@ export class VaultService {
   async verifyAndRegister(
     accountId: string,
     req: VerificationRequest,
+    /**
+     * Moderator override after a manual review (R10): skips the provider check only.
+     * Duplicate, ban and 18+ checks always still apply.
+     */
+    override?: { reasonCode: string },
   ): Promise<{ identityId: string }> {
     const attrs = { state: req.state, licenseNumber: req.licenseNumber };
     const status = await this.identityStatus(attrs);
@@ -90,10 +95,12 @@ export class VaultService {
       throw new VaultError('under_18');
     }
 
-    const outcome = await this.d.verifier.verify(req);
-    if (outcome.status === 'needs_review') throw new VaultError('needs_review');
-    if (outcome.status === 'rejected') {
-      throw new VaultError(outcome.reason === 'under_18' ? 'under_18' : 'not_verified');
+    if (!override) {
+      const outcome = await this.d.verifier.verify(req);
+      if (outcome.status === 'needs_review') throw new VaultError('needs_review');
+      if (outcome.status === 'rejected') {
+        throw new VaultError(outcome.reason === 'under_18' ? 'under_18' : 'not_verified');
+      }
     }
 
     const token = computeToken(this.d.tokenKeys, attrs);
@@ -104,7 +111,11 @@ export class VaultService {
         [token.version, token.digest, this.accountLookup(accountId)],
       );
       const identityId = rows[0]!.id;
-      await this.audit('identity.created', identityId, 'system');
+      if (override) {
+        await this.audit('identity.created.override', identityId, 'moderator', override.reasonCode);
+      } else {
+        await this.audit('identity.created', identityId, 'system');
+      }
       return { identityId };
     } catch (err) {
       // A concurrent registration of the same person loses the race on the unique constraint.
@@ -214,6 +225,27 @@ export class VaultService {
       [identity.id],
     );
     return rows.length > 0;
+  }
+
+  /**
+   * Moderator-assisted recovery (R26): true only if these identity attributes
+   * belong to the identity already bound to this account, and it is not banned.
+   */
+  async matchesAccount(accountId: string, attrs: LicenseAttributes): Promise<boolean> {
+    const tokens = computeAllTokens(this.d.tokenKeys, attrs);
+    const { rows } = await this.d.pool.query<{ id: string }>(
+      `SELECT id FROM identities
+        WHERE account_lookup = $1 AND status = 'active'
+          AND (token_version, token) IN (SELECT * FROM unnest($2::smallint[], $3::bytea[]))`,
+      [this.accountLookup(accountId), tokens.map((t) => t.version), tokens.map((t) => t.digest)],
+    );
+    const matched = rows[0]?.id ?? null;
+    await this.audit(
+      matched ? 'recovery.identity_matched' : 'recovery.identity_mismatch',
+      matched,
+      'user',
+    );
+    return matched !== null;
   }
 
   /** Permanent ban: the identity token stays, so the person can never re-register. */

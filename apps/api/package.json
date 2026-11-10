@@ -11,7 +11,9 @@
     "start": "node dist/server.js",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "moderator:grant": "node --env-file=../../.env scripts/grant-moderator.mjs grant",
+    "moderator:revoke": "node --env-file=../../.env scripts/grant-moderator.mjs revoke"
   },
   "dependencies": {
     "@demanity/db": "workspace:*",

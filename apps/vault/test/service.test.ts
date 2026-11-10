@@ -124,6 +124,48 @@ describe('verifyAndRegister', () => {
   });
 });
 
+describe('moderator override and recovery matching', () => {
+  it('lets a moderator approve a needs-review case, without bypassing safety checks', async () => {
+    const review = person({ licenseNumber: 'REVIEW77' });
+    await expect(vault.verifyAndRegister(randomUUID(), review)).rejects.toMatchObject({
+      code: 'needs_review',
+    });
+    const override = { reasonCode: 'manual_document_review' };
+    await expect(vault.verifyAndRegister(randomUUID(), review, override)).resolves.toHaveProperty(
+      'identityId',
+    );
+    // Duplicates, minors and banned people are still refused under an override.
+    await expect(vault.verifyAndRegister(randomUUID(), review, override)).rejects.toMatchObject({
+      code: 'duplicate_identity',
+    });
+    await expect(
+      vault.verifyAndRegister(randomUUID(), person({ birthDate: '2012-01-01' }), override),
+    ).rejects.toMatchObject({ code: 'under_18' });
+
+    const { rows } = await pool.query(
+      "SELECT reason_code FROM audit_log WHERE action = 'identity.created.override'",
+    );
+    expect(rows.map((r) => r.reason_code)).toContain('manual_document_review');
+  });
+
+  it('matches identity attributes only to the account they belong to', async () => {
+    const mine = randomUUID();
+    const theirs = randomUUID();
+    const me = person({ licenseNumber: 'M5550001' });
+    await vault.verifyAndRegister(mine, me);
+    await vault.verifyAndRegister(theirs, person({ licenseNumber: 'M5550002' }));
+
+    expect(await vault.matchesAccount(mine, { state: 'ca', licenseNumber: 'm555-0001' })).toBe(
+      true,
+    );
+    expect(await vault.matchesAccount(theirs, me)).toBe(false); // someone else's identity
+    expect(await vault.matchesAccount(randomUUID(), me)).toBe(false); // unknown account
+
+    await vault.ban(mine, 'moderator', 'account_sale');
+    expect(await vault.matchesAccount(mine, me)).toBe(false); // banned identities can't recover
+  });
+});
+
 describe('contacts and 2FA', () => {
   it('stores contacts encrypted and sends codes to the decrypted value', async () => {
     const accountId = randomUUID();

@@ -146,6 +146,55 @@ describe('vault HTTP API', () => {
     expect(extra.statusCode).toBe(400); // unknown fields are rejected, never stored
   });
 
+  it('exposes override, match and ban over HTTP', async () => {
+    const b = body({ licenseNumber: 'REVIEW55' });
+    const review = await app.inject({
+      method: 'POST',
+      url: '/v1/identities/verify',
+      headers: auth,
+      payload: b,
+    });
+    expect(review.statusCode).toBe(202);
+    const approved = await app.inject({
+      method: 'POST',
+      url: '/v1/identities/verify',
+      headers: auth,
+      payload: { ...b, override: { reasonCode: 'manual_document_review' } },
+    });
+    expect(approved.statusCode).toBe(201);
+
+    const match = await app.inject({
+      method: 'POST',
+      url: '/v1/identities/match',
+      headers: auth,
+      payload: { accountId: b.accountId, state: b.state, licenseNumber: b.licenseNumber },
+    });
+    expect(match.json()).toEqual({ match: true });
+
+    const ban = await app.inject({
+      method: 'POST',
+      url: `/v1/accounts/${b.accountId}/ban`,
+      headers: auth,
+      payload: { reasonCode: 'account_sale' },
+    });
+    expect(ban.statusCode).toBe(204);
+    const again = await app.inject({
+      method: 'POST',
+      url: '/v1/identities/verify',
+      headers: auth,
+      payload: { ...b, accountId: randomUUID() },
+    });
+    expect(again.json()).toEqual({ error: 'banned' });
+
+    const badReason = await app.inject({
+      method: 'POST',
+      url: `/v1/accounts/${b.accountId}/ban`,
+      headers: auth,
+      payload: { reasonCode: 'Not A Code!' },
+    });
+    expect(badReason.statusCode).toBe(400);
+  });
+
   it('never writes identity attributes or contacts to logs', async () => {
     const b = body({ licenseNumber: 'LOGTEST99' });
     await app.inject({ method: 'POST', url: '/v1/identities/verify', headers: auth, payload: b });

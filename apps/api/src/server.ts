@@ -5,6 +5,7 @@ import { Redis } from 'ioredis';
 import { buildApp, loggerOptions } from './app.js';
 import { RedisChallengeStore } from './auth/challenges.js';
 import { loadConfig, loadServiceConfig } from './config.js';
+import { deleteStalePendingAccounts } from './moderation/service.js';
 import { HttpVaultClient } from './vault-client.js';
 
 const config = loadConfig();
@@ -26,6 +27,17 @@ const app = await buildApp({
     rateLimit: { secret: svc.rateLimitSecret, redis },
   },
 });
+
+// Hourly: free usernames held by sign-ups that never verified within 24 hours.
+const cleanup = setInterval(
+  () => {
+    deleteStalePendingAccounts(pool)
+      .then((n) => n > 0 && app.log.info({ deleted: n }, 'removed stale pending accounts'))
+      .catch((err: Error) => app.log.error({ err: { name: err.name } }, 'pending cleanup failed'));
+  },
+  60 * 60 * 1000,
+);
+cleanup.unref();
 
 try {
   await app.listen({ host: config.host, port: config.port });

@@ -115,12 +115,37 @@ export async function accountRoutes(app: FastifyInstance, deps: AccountRouteDeps
     },
     async (req, reply) => {
       const accountId = req.session!.accountId;
+      const { rows: reviews } = await pool.query<{ status: string; reason_code: string | null }>(
+        'SELECT status, reason_code FROM verification_reviews WHERE account_id = $1',
+        [accountId],
+      );
+      const review = reviews[0];
+      if (review?.status === 'pending') {
+        return reply.code(202).send({ status: 'pending', review: 'moderator_queue' });
+      }
+      if (review?.status === 'denied') {
+        return reply.code(403).send({ error: 'verification_denied', reason: review.reason_code });
+      }
+      const override =
+        review?.status === 'approved'
+          ? { reasonCode: review.reason_code ?? 'manual_document_review' }
+          : undefined;
       try {
-        const result = await vault.verifyIdentity(accountId, req.body as IdentityPayload);
+        const result = await vault.verifyIdentity(accountId, req.body as IdentityPayload, override);
         if (result === 'needs_review') {
+          await pool.query(
+            'INSERT INTO verification_reviews (account_id) VALUES ($1) ON CONFLICT (account_id) DO NOTHING',
+            [accountId],
+          );
           return reply.code(202).send({ status: 'pending', review: 'moderator_queue' });
         }
         await pool.query("UPDATE accounts SET status = 'verified' WHERE id = $1", [accountId]);
+        if (override) {
+          await pool.query(
+            "UPDATE verification_reviews SET status = 'used' WHERE account_id = $1",
+            [accountId],
+          );
+        }
         return { status: 'verified' };
       } catch (err) {
         return sendVaultError(reply, err);

@@ -21,6 +21,19 @@ The moderation team has final authority over who is verified:
 
 Every override records a reason code. Overrides also count toward the symmetric-enforcement audits in [NONPARTISANSHIP.md](NONPARTISANSHIP.md).
 
+**How this works today (implemented):**
+- **Becoming a moderator.** The moderator role is granted or revoked only by an operator tool. There is no API for it, so no account can promote itself. Every grant and revocation appears in the public log.
+- **Review queue.** When the verification provider can't decide, the account enters a review queue. The queue holds **no identity data**. Once a moderator approves, the user re-submits their details. The duplicate-person, ban and 18+ checks still apply. An approval works once.
+- **Bans.** A ban ends all sessions, revokes passkeys and bans the underlying identity, so the person cannot create a new account.
+- **Recovery when both the device and 2FA are lost.** The user files a request and a moderator approves it. The user then re-verifies their identity, which must match the identity already on the account. Each approval works once.
+- **Rules for every decision:**
+  - It must use a published reason code (`GET /v1/moderation/reason-codes`), and the code must fit the decision.
+  - Moderators cannot decide their own cases.
+- **The public log** (`GET /v1/moderation/log`):
+  - Guests can read it.
+  - It shows the action, reason code, role and time. It never shows which moderator acted.
+  - It is append-only, enforced by the database.
+
 ## 3. Context notes
 - Moderators may add a labeled **"Moderator context"** note to any post, comment, poll, citation, legislation item or organization-page vote.
 - Each note must cite an approved source ([SOURCES.md](SOURCES.md)).
